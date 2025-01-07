@@ -1,0 +1,1 @@
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\SolutionManager_1.0.3.0_x64_Test\SolutionManager_1.0.3.0_x64.msix

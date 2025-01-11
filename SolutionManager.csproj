@@ -12,6 +12,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
     <SelfContained>true</SelfContained>
+    <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
   <ItemGroup>

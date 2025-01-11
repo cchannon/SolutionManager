@@ -7,7 +7,6 @@ C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-window
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\SolutionManager.dll
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\SolutionManager.pdb
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\resources.pri
-C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\AppxManifest.xml
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Microsoft.Web.WebView2.Core.dll
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\CommunityToolkit.WinUI.UI.Controls.DataGrid.dll
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Microsoft.InteractiveExperiences.Projection.dll
@@ -249,4 +248,12 @@ C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-window
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\qualifiers.txt
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\qualifiers.txt.intermediate
 C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\MultipleQualifiersPerDimensionFound.txt
-C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\ProjectArchitectures.txt
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\lockheed-martin-logo.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\LockScreenLogo.scale-200.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\SplashScreen.scale-200.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\Square150x150Logo.scale-200.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\Square44x44Logo.scale-200.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\Square44x44Logo.targetsize-24_altform-unplated.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\StoreLogo.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Assets\Wide310x150Logo.scale-200.png
+C:\Users\CharlesChannon\Source\Repos\SolutionManager\obj\x64\Debug\net8.0-windows10.0.19041.0\win-x64\SolutionManager.sourcelink.json

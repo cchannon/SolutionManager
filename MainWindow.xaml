@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
-    Title="Lockheed Martin Power Platform Environment Management App">
+    Title="The Air Traffic Control Tower">
 
     <Page>
         <Page.Resources>
@@ -30,7 +30,7 @@
                                                     <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemBaseMediumColor}"/>
                                                 </ObjectAnimationUsingKeyFrames>
                                                 <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemAltHighColor}"/>
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemBaseHighColor}"/>
                                                 </ObjectAnimationUsingKeyFrames>
                                                 <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="FontWeight">
                                                     <DiscreteObjectKeyFrame KeyTime="0" Value="SemiBold"/>
@@ -43,10 +43,10 @@
                                         <VisualState x:Name="Checked">
                                             <Storyboard>
                                                 <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Border" Storyboard.TargetProperty="Background">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemAltLowColor}"/>
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemControlAccentAcrylicElementAccentMediumHighBrush}"/>
                                                 </ObjectAnimationUsingKeyFrames>
                                                 <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemAltHighColor}"/>
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemBaseHighColor}"/>
                                                 </ObjectAnimationUsingKeyFrames>
                                                 <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="FontWeight">
                                                     <DiscreteObjectKeyFrame KeyTime="0" Value="SemiBold"/>
@@ -63,13 +63,25 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+            <!-- Custom Style for ListBox with CornerRadius -->
+            <Style TargetType="ListBox" x:Key="RoundedListBoxStyle">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBox">
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                                <ScrollViewer>
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </Page.Resources>
 
-        <Grid Loaded="Grid_Loaded">
-
-            <!-- Splash Screen -->
-            <Image x:Name="splashScreen" Source="assets/lockheed-martin-logo.png" Stretch="Uniform" />
-
+        <Grid Loaded="Grid_Loaded" Background="{ThemeResource SolidBackgroundFillColorBase}">
+            <!-- Background -->
+            <Image x:Name="splashScreen" Source="assets/ATC-background.jpeg" Stretch="UniformToFill" />
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -78,7 +90,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Command Panel -->
-                <StackPanel x:Name="commandPanel" Orientation="Horizontal" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity="0" Padding="10" Margin="10" CornerRadius="5" Grid.Row="0" HorizontalAlignment="Right">
+                <StackPanel x:Name="commandPanel" Orientation="Horizontal" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity="0" Padding="10" Margin="10" CornerRadius="5" Grid.Row="0" HorizontalAlignment="Right">
                     <TextBlock x:Name="authProfileText" Text="Auth Profile: Default" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="{ThemeResource SystemBaseHighColor}"/>
                     <Button x:Name="changeAuthProfileButton" Content="Change Auth Profile" Click="ChangeAuthProfileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" />
                 </StackPanel>
@@ -96,29 +108,29 @@
                             <ColumnDefinition Width="2.5*" />
                         </Grid.ColumnDefinitions>
                         <!-- Environment Panel -->
-                        <Grid Grid.Column="0" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5">
+                        <Grid Grid.Column="0" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Environments" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
-                                <ListBox x:Name="environmentList" SelectionChanged="EnvironmentList_SelectionChanged" ItemsSource="{Binding EnvironmentProfiles}" DisplayMemberPath="DisplayName" />
+                                <ListBox x:Name="environmentList" SelectionChanged="EnvironmentList_SelectionChanged" ItemsSource="{Binding EnvironmentProfiles}" DisplayMemberPath="DisplayName" Style="{StaticResource RoundedListBoxStyle}"/>
                             </ScrollViewer>
                         </Grid>
                         <!-- Solution Panel -->
-                        <Grid x:Name="solutionsListPanel" Grid.Column="1" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Collapsed">
+                        <Grid x:Name="solutionsListPanel" Grid.Column="1" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Collapsed">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Unmanaged Solutions" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
-                                <ListBox x:Name="solutionsList" SelectionChanged="SolutionList_SelectionChanged" ItemsSource="{Binding SolutionProfiles}" DisplayMemberPath="FriendlyName" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                                <ListBox x:Name="solutionsList" SelectionChanged="SolutionList_SelectionChanged" ItemsSource="{Binding SolutionProfiles}" DisplayMemberPath="FriendlyName" ScrollViewer.VerticalScrollBarVisibility="Auto" Style="{StaticResource RoundedListBoxStyle}"/>
                             </ScrollViewer>
                         </Grid>
                         <!-- Solution Details Panel -->
-                        <Grid x:Name="solutionDetailsPanel" Grid.Column="2" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Visibility="Collapsed" Padding="10" Margin="10" CornerRadius="5">
+                        <Grid x:Name="solutionDetailsPanel" Grid.Column="2" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Visibility="Collapsed" Padding="10" Margin="10" CornerRadius="5">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="1.5*" />
                                 <ColumnDefinition Width="*" />
@@ -128,8 +140,11 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Export Options" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
-                            <Grid Grid.Column="0" Grid.Row="1">
+                            <Grid Grid.Column="0" Grid.Row="1" RowSpacing="10">
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="auto" />
+                                    <RowDefinition Height="auto" />
+                                    <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
@@ -137,23 +152,52 @@
                                     <RowDefinition Height="auto" />
                                 </Grid.RowDefinitions>
                                 <!-- Zip File Path -->
-                                <TextBlock Text="Zip File Path:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Column="0" Grid.Row="0"/>
-                                <Grid Margin="0,0,0,10" Grid.Column="0" Grid.Row="1">
+                                <TextBlock Text="Zip File Path:" VerticalAlignment="Center" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Column="0" Grid.Row="0"/>
+                                <Grid Grid.Column="0" Grid.Row="1">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2.25*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="zipFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
+                                    <TextBox x:Name="zipFilePathTextBox" Background="DarkGray" Grid.Column="0"/>
                                     <Button x:Name="exportPathBrowse" Content="Browse" Click="BrowseFolderButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1"/>
                                 </Grid>
+                                <!-- Versioning -->
+                                <TextBlock Text="Solution Version:" VerticalAlignment="Center" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Column="0" Grid.Row="2"/>
+                                <ItemsControl Grid.Column="0" Grid.Row="3">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsWrapGrid Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <RadioButtons x:Name="solutionStrategyRadioButtons">
+                                        <RadioButton Content="Solution Strategy" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" IsChecked="True" Margin="5"/>
+                                        <RadioButton Content="Custom" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" />
+                                        <RadioButton Content="Unchanged" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" />
+                                    </RadioButtons>
+                                </ItemsControl>
+                                <Grid x:Name="customVersionPanel" Grid.Column="0" Grid.Row="4" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="X.X." Foreground="{ThemeResource SystemBaseHighColor}" VerticalAlignment="Bottom" Grid.Column="0"/>
+                                    <NumberBox x:Name="releaseVer" Background="DarkGray" Width="25" Height="25" CornerRadius="0" Grid.Column="1"/>
+                                    <TextBlock Text="." Foreground="{ThemeResource SystemBaseHighColor}" VerticalAlignment="Bottom" Grid.Column="2"/>
+                                    <NumberBox x:Name="buildVer" Background="DarkGray"  Width="25" Height="25" CornerRadius="0" Grid.Column="3"/>
+                                </Grid>
+                                <TextBlock x:Name="solutionStrategyHelpText" Grid.Column="0" Grid.Row="4" TextWrapping="WrapWholeWords" Text="Solution Strategy automatically increments the Release number in your version (i.e. V 1.1.3.7 would become 1.1.4.0)" Foreground="{ThemeResource SystemBaseHighColor}" Visibility="Visible"/>
+                                <TextBlock x:Name="unchangedVersionHelpText" Grid.Column="0" Grid.Row="4" TextWrapping="WrapWholeWords" Text="The solution version number will export exactly as it is now in the server." Foreground="{ThemeResource SystemBaseHighColor}" Visibility="Collapsed"/>
                                 <!-- Export as Managed -->
-                                <CheckBox x:Name="exportAsManagedCheckBox" Content="Export as Managed" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}"  Grid.Column="0" Grid.Row="2" />
+                                <CheckBox x:Name="exportAsManagedCheckBox" Content="Export as Managed" IsChecked="True" Foreground="{ThemeResource SystemBaseHighColor}"  Grid.Column="0" Grid.Row="5" />
 
                                 <!-- Overwrite -->
-                                <CheckBox x:Name="overwriteCheckBox" Content="Overwrite" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Column="0" Grid.Row="3" Opacity="1"/>
+                                <CheckBox x:Name="overwriteCheckBox" Content="Overwrite" IsChecked="True" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Column="0" Grid.Row="6" Opacity="1"/>
                                 <!-- Export and Publish Buttons -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Column="0" Grid.Row="4">
-                                    <Button x:Name="publishButton" Content="📤 Publish" Click="PublishButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Margin="0,0,10,0"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Column="0" Grid.Row="7">
+                                    <Button x:Name="publishButton" Content="📤 Publish" Click="PublishButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Margin="0,0,10,0" >
+                                    </Button>
                                     <Button x:Name="exportButton" Content="🏃‍♂️‍➡️ Export" Click="ExportButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18"/>
                                 </StackPanel>
                             </Grid>
@@ -161,7 +205,7 @@
                             <StackPanel Orientation="Vertical" Grid.Column="1" Grid.Row="1">
                                 <!-- Include Settings -->
                                 <TextBlock Text="Include Settings:" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold"/>
-                                <ListBox x:Name="includeSettingsListBox" SelectionMode="Multiple" Margin="0,0,0,10" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox x:Name="includeSettingsListBox" SelectionMode="Multiple" Margin="0,0,0,10" ScrollViewer.VerticalScrollBarVisibility="Auto" Style="{StaticResource RoundedListBoxStyle}">
                                     <ListBoxItem Content="autonumbering"/>
                                     <ListBoxItem Content="calendar"/>
                                     <ListBoxItem Content="customization"/>
@@ -177,143 +221,67 @@
                             </StackPanel>
                         </Grid>
                     </Grid>
-                    <!-- Update Solution Content -->
-                    <Grid x:Name="updateContent" Grid.Column="0" Visibility="Collapsed">
+                    <!-- Solution Settings Content -->
+                    <Grid x:Name="settingsContent" Grid.Column="0" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2.5*" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="3.5*" />
                         </Grid.ColumnDefinitions>
-                        <!-- Update Stage Panel -->
-                        <Grid Grid.Column="0" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Visible">
+                        <Grid x:Name="settingsPanel" Grid.Column="0" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="Update Stage" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
-                            <RadioButton Content="Replace GUIDs" Checked="UpdateRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="1" Height="35" IsChecked="True"/>
-                            <RadioButton Content="Settings.JSON" Checked="UpdateRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="2" Height="35" IsChecked="False"/>
+                            <TextBlock Text="Settings.JSON Configurations" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
+                            <TextBlock Text="Solution File:" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="1" FontWeight="SemiBold" />
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="settingsSolutionZipTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
+                                <Button x:Name="settingsSolutionPathBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1"/>
+                            </Grid>
+                            <Grid x:Name="matchingConfigs" Grid.Row="3" Visibility="Collapsed" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Matching Configurations:" FontWeight="SemiBold" Margin="0,10,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Column="0" Grid.Row="0"/>
+                                <ListBox x:Name="matchingConfigsListBox" Margin="0,0,0,10" SelectionChanged="MatchingConfigsList_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" Style="{StaticResource RoundedListBoxStyle}"  Grid.Column="0" Grid.Row="1"/>
+                                <TextBlock x:Name="matchingConfigsNoneBox" Text="None." Grid.Column="0" Grid.Row="1" Visibility="Collapsed" />
+                                <Grid Grid.Column="1" Grid.Row="1" RowSpacing="20">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Button x:Name="generateSettingsButton" Content="Generate New Settings.JSON File" Click="GenerateSettingsButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Row="0"/>
+                                    <Button x:Name="addSettingsButton" Content="Store a Settings File" Click="AddSettingsButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Row="1"/>
+                                    <Button x:Name="validateSettingsButton" Content="Validate All Settings Files" Click="ValidateSettingsButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Row="2"/>
+                                    <Button x:Name="removeSelectedSettingsButton" Content="Remove Selected Settings File" Click="RemoveSelectedSettingsButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Row="3" Visibility="Collapsed"/>
+                                </Grid>
+                            </Grid>
                         </Grid>
-                        <!-- GuidSwap Panel-->
-                        <Grid x:Name="guidSwapPanel" Grid.Column="1" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Visible">
+                        <Grid x:Name="settingsResults" Grid.Column="1" Visibility="Collapsed" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" >
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
-                            <TextBlock Text="Swap Guids" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
-                            <TextBlock Text="Zip File Path:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Row="1"/>
-                            <Grid Margin="0,0,0,10" Grid.Row="2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="2.25*" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="updateZipFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                <Button x:Name="updateGuidsZipBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1"/>
-                            </Grid>
-                            <TextBlock Text="Csv File Path:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Row="3"/>
-                            <Grid Margin="0,0,0,10" Grid.Row="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="2.25*" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="updateCsvFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                <Button x:Name="updateGuidsCsvBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                            </Grid>
-                            <TextBlock Text="Target Directory:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Row="5"/>
-                            <Grid Margin="0,0,0,10" Grid.Row="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="2.25*" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="updateGuidsTargetDirTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                <Button x:Name="updateGuidsTargetDirBrowse" Content="Browse" Click="BrowseFolderButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                            </Grid>
-                            <controls:DataGrid x:Name="csvPreviewDataGrid" Grid.Row="7" AutoGenerateColumns="True" IsReadOnly="True" Background="{ThemeResource SystemChromeHighColor}" Opacity="1"/>
-                            <Button x:Name="swapGuidsButton" Content="🔄️ Replace Strings" Grid.Row="8" Click="ReplaceStrings_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Visibility="Collapsed"/>
-                        </Grid>
-                        <!-- Settings File Panel-->
-                        <Grid x:Name="settingsFilePanel" Grid.Column="1" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Collapsed">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Settings.JSON file generation and update" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0" Grid.Column="0"/>
-                            <!-- ToggleSwitch to switch between single file and recursive directory -->
-                            <StackPanel Grid.Row="1" Grid.Column="0">
-                                <TextBlock Text="Generate Mode:" Margin="10,0,10,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="1" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                <ToggleSwitch x:Name="generateModeToggle" OnContent="Single File" OffContent="Directory-Recursive" Toggled="GenerateModeToggle_Toggled" Margin="0,0,0,10" Grid.Row="1" Foreground="{ThemeResource SystemBaseHighColor}" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <!-- Single File Generation -->
-                            <StackPanel x:Name="singleFilePanel" Grid.Row="1" Grid.Column="1" Visibility="Collapsed">
-                                <TextBlock Text="Solution:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" />
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2.25*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="settingsZipFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                    <Button x:Name="settingsZipFilePathBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                                </Grid>
-                            </StackPanel>
-
-                            <!-- Recursive Directory Generation -->
-                            <StackPanel x:Name="recursiveDirectoryPanel" Grid.Row="1" Grid.Column="1">
-                                <TextBlock Text="Directory:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" />
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2.25*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="settingsTargetDirTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                    <Button x:Name="settingsTargetDirBrowse" Content="Browse" Click="BrowseFolderButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                                </Grid>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="2" Grid.Column="0">
-                                <TextBlock Text="EV Configuration File:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Row="4"/>
-                                <Grid Margin="0,0,0,10" Grid.Row="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2.25*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="evCsvFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                    <Button x:Name="evCsvFilePathBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                                </Grid>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="2" Grid.Column="1">
-                                <TextBlock Text="CR Configuration File:" VerticalAlignment="Center" Margin="10" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Row="4"/>
-                                <Grid Margin="0,0,0,10" Grid.Row="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2.25*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="crCsvFilePathTextBox" Margin="0,0,10,0" Background="DarkGray" Grid.Column="0"/>
-                                    <Button x:Name="crCsvFilePathBrowse" Content="Browse" Click="BrowseFileButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1" />
-                                </Grid>
-                            </StackPanel>
-                            <controls:DataGrid x:Name="evPreviewDataGrid" Grid.Row="6" Grid.Column="0" AutoGenerateColumns="True" IsReadOnly="True" Background="{ThemeResource SystemChromeHighColor}" Opacity="1" Margin="10" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
-                            <controls:DataGrid x:Name="crPreviewDataGrid" Grid.Row="6" Grid.Column="1" AutoGenerateColumns="True" IsReadOnly="True" Background="{ThemeResource SystemChromeHighColor}" Opacity="1" Margin="10" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
-                            <Button x:Name="generateSettings" Content="🔄️ Generate Settings File(s)" Grid.Row="7" Click="GenerateSettings_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Visibility="Collapsed" Margin="10"/>
+                            <TextBlock Text="Logging" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1" >
+                                <TextBlock x:Name="settingsLogTextBlock" TextWrapping="Wrap" Foreground="{ThemeResource SystemBaseHighColor}" FontFamily="Consolas" Margin="0,10,0,0"/>
+                            </ScrollViewer>
                         </Grid>
                     </Grid>
                     <!-- Import Solution Content -->
@@ -323,18 +291,18 @@
                             <ColumnDefinition Width="3.5*" />
                         </Grid.ColumnDefinitions>
                         <!-- Environment Picker Panel -->
-                        <Grid Grid.Column="0" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5">
+                        <Grid Grid.Column="0" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Environments" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
-                                <ListBox x:Name="importEnvironmentList" ItemsSource="{Binding EnvironmentProfiles}" DisplayMemberPath="DisplayName"/>
+                                <ListBox x:Name="importEnvironmentList" ItemsSource="{Binding EnvironmentProfiles}" DisplayMemberPath="DisplayName" Style="{StaticResource RoundedListBoxStyle}"/>
                             </ScrollViewer>
                         </Grid>
                         <!-- Import Solution Details Panel -->
-                        <Grid Grid.Column="1" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" >
+                        <Grid Grid.Column="1" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" >
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -370,21 +338,21 @@
                             </Grid>
                             <!-- Settings -->
                             <CheckBox x:Name="activatePluginsCheckBox" Content="Activate Plugins" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="5"/>
-                            <CheckBox x:Name="stageAndUpgradeCheckBox" Content="Stage and Upgrade" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="6"/>
-                            <CheckBox x:Name="publishAfterImportCheckBox" Content="Publish after Import" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="7"/>
-                            <CheckBox x:Name="forceOverwriteCheckBox" Content="Force Overwrite" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="8"/>
+                            <CheckBox x:Name="publishAfterImportCheckBox" Content="Publish after Import" IsChecked="True" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="6"/>
+                            <CheckBox x:Name="stageAndUpgradeCheckBox" Content="Stage and Upgrade" IsChecked="False" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="7"/>
+                            <CheckBox x:Name="forceOverwriteCheckBox" Content="Force Overwrite" IsChecked="False" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="8"/>
                             <!-- Import Button -->
                             <Button x:Name="importButton" Content="📥 Import Solution" Click="ImportButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Grid.Row="9"/>
                         </Grid>
                     </Grid>
                     <!-- Jobs Panel -->
-                    <Grid x:Name="jobsPanel"  Grid.Column="1" Background="{ThemeResource SystemChromeDisabledLowColor}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Collapsed">
+                    <Grid x:Name="jobsPanel"  Grid.Column="1" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Opacity=".9" Padding="10" Margin="10" CornerRadius="5" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="Job History" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
-                        <ListBox x:Name="jobsListBox" ItemsSource="{Binding Jobs}" SelectionChanged="JobsListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" Grid.Row="1">
+                        <ListBox x:Name="jobsListBox" ItemsSource="{Binding Jobs}" SelectionChanged="JobsListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" Grid.Row="1" Style="{StaticResource RoundedListBoxStyle}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding DisplayName}">
@@ -407,15 +375,17 @@
                     </Grid>
                 </Grid>
                 <!-- Pivot -->
-                <Grid x:Name="pivotFooter" Background="{ThemeResource SystemBaseMediumColor}" Padding="10" Margin="10" Opacity="0" CornerRadius="5" HorizontalAlignment="Stretch" Grid.Row="2">
+                <Grid x:Name="pivotFooter" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="10" Margin="10" Opacity="0" CornerRadius="5" HorizontalAlignment="Stretch" Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <RadioButton Content="Export" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="0" Height="35" IsChecked="True"/>
-                    <RadioButton Content="Update" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="1" Height="35"/>
-                    <RadioButton Content="Import" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="2" Height="35"/>
+                    <RadioButton Content="1. Export" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="0" Height="35" IsChecked="True"/>
+                    <RadioButton Content="2. Settings" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="1" Height="35"/>
+                    <RadioButton Content="3. Import" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="2" Height="35"/>
+                    <RadioButton Content="4. Validate" GroupName="PivotGroup" Checked="PivotRadioButton_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Column="3" Height="35"/>
                 </Grid>
             </Grid>
             <!-- Progress Ring Overlay -->

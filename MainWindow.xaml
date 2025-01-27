@@ -140,8 +140,11 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Export Options" FontWeight="Bold" Margin="0,0,0,10" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Row="0"/>
-                            <Grid Grid.Column="0" Grid.Row="1" RowSpacing="10">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Column="0" Grid.Row="1" >
+                            <Grid RowSpacing="10">
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="auto" />
+                                    <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
                                     <RowDefinition Height="auto" />
@@ -163,19 +166,12 @@
                                 </Grid>
                                 <!-- Versioning -->
                                 <TextBlock Text="Solution Version:" VerticalAlignment="Center" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Column="0" Grid.Row="2"/>
-                                <ItemsControl Grid.Column="0" Grid.Row="3">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <ItemsWrapGrid Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <RadioButtons x:Name="solutionStrategyRadioButtons">
-                                        <RadioButton Content="Solution Strategy" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" IsChecked="True" Margin="5"/>
-                                        <RadioButton Content="Custom" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" />
-                                        <RadioButton Content="Unchanged" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" />
+                                <RadioButtons x:Name="solutionStrategyRadioButtons" Grid.Column="0" Grid.Row="3">
+                                        <RadioButton Content="Solution Strategy" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" IsChecked="True" Margin="5" Height="30"/>
+                                        <RadioButton Content="Custom" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" Height="30" />
+                                        <RadioButton Content="Unchanged" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" Height="30" />
                                     </RadioButtons>
-                                </ItemsControl>
-                                <Grid x:Name="customVersionPanel" Grid.Column="0" Grid.Row="4" Visibility="Collapsed">
+                                    <Grid x:Name="customVersionPanel" Grid.Column="0" Grid.Row="4" Visibility="Collapsed">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
@@ -194,13 +190,20 @@
 
                                 <!-- Overwrite -->
                                 <CheckBox x:Name="overwriteCheckBox" Content="Overwrite" IsChecked="True" Foreground="{ThemeResource SystemBaseHighColor}" Grid.Column="0" Grid.Row="6" Opacity="1"/>
-                                <!-- Export and Publish Buttons -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Column="0" Grid.Row="7">
+                                <CheckBox x:Name="CheckInAfterExport" Content="Git Check-in after Export" IsChecked="False" Grid.Column="0" Grid.Row="7" Foreground="{ThemeResource SystemBaseHighColor}" Opacity="1" PointerEntered="CheckInAfterExport_PointerEntered" PointerExited="CheckInAfterExport_PointerExited"/>
+                                <InfoBar x:Name="CheckInInfoBar" Title="Info" IsOpen="False" Severity="Informational" Grid.Column="0" Grid.Row="8" Margin="5,0,0,0" >
+                                    <InfoBar.Content>
+                                        <TextBlock Text="Check this option to automatically perform a Git check-in after exporting the solution." TextWrapping="WrapWholeWords"/>
+                                    </InfoBar.Content>
+                                </InfoBar>
+                                    <!-- Export and Publish Buttons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Column="0" Grid.Row="9">
                                     <Button x:Name="publishButton" Content="📤 Publish" Click="PublishButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18" Margin="0,0,10,0" >
                                     </Button>
                                     <Button x:Name="exportButton" Content="🏃‍♂️‍➡️ Export" Click="ExportButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Width="auto" FontSize="18"/>
                                 </StackPanel>
                             </Grid>
+                            </ScrollViewer>
 
                             <StackPanel Orientation="Vertical" Grid.Column="1" Grid.Row="1">
                                 <!-- Include Settings -->

@@ -14,6 +14,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Xml.Linq;
 using Windows.Storage;
+using Microsoft.UI.Xaml.Input;
 
 namespace SolutionManager
 {
@@ -107,7 +108,7 @@ namespace SolutionManager
             progressRingOverlay.Visibility = Visibility.Collapsed;
         }
 
-        private async Task<string?> RunPowerShellScriptAsync(string scriptText)
+        private async Task<string?> RunPowerShellScriptAsync(string scriptText, string workingDirectory = "")
         {
             try
             {
@@ -118,7 +119,8 @@ namespace SolutionManager
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    WorkingDirectory = string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory
                 };
 
                 using Process process = new();
@@ -927,67 +929,8 @@ namespace SolutionManager
                             return;
                         }
 
-                        // Extract solution.xml from the zip file
-                        string tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-                        Directory.CreateDirectory(tempDirectory);
-                        string solutionXmlPath = Path.Combine(tempDirectory, "solution.xml");
-
-                        using (ZipArchive archive = ZipFile.OpenRead(zipFilePath))
-                        {
-                            var solutionEntry = archive.GetEntry("solution.xml");
-                            if (solutionEntry != null)
-                            {
-                                solutionEntry.ExtractToFile(solutionXmlPath, true);
-                            }
-                            else
-                            {
-                                currentJob.Status = "Failed";
-                                currentJob.Output += Environment.NewLine + "solution.xml not found in the zip file.";
-                                return;
-                            }
-                        }
-
-                        // Run the pac solution version command on the extracted solution.xml
-                        var command2 = $"pac solution version -sp '{solutionXmlPath}'";
-                        switch(solutionStrategyRadioButtons.SelectedItem)
-                        {
-                            case RadioButton customRadioButton when customRadioButton.Content.ToString() == "Custom":
-                                if (!string.IsNullOrEmpty(releaseVer.Text))
-                                {
-                                    command2 += $" --revisionversion {releaseVer.Text}";
-                                }
-                                if (!string.IsNullOrEmpty(buildVer.Text))
-                                {
-                                    command2 += $" --buildversion {buildVer.Text}";
-                                }
-                                break;
-                            case RadioButton solutionStrategyRadioButton when solutionStrategyRadioButton.Content.ToString() == "Solution Strategy":
-                                command2 += " -s solution";
-                                break;
-                            case RadioButton unchangedRadioButton when unchangedRadioButton.Content.ToString() == "Unchanged":
-                                break;
-                        }
-                        string? output2 = await RunPowerShellScriptAsync(command2);
-                        if (string.IsNullOrEmpty(output2) || !output2.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
-                        {
-                            currentJob.Status = "Failed";
-                            currentJob.Output += Environment.NewLine + output2 ?? string.Empty;
-                            return;
-                        }
-
-                        // Replace the solution.xml in the zip file with the updated version
-                        using (ZipArchive archive = ZipFile.Open(zipFilePath, ZipArchiveMode.Update))
-                        {
-                            var solutionEntry = archive.GetEntry("solution.xml");
-                            solutionEntry?.Delete();
-                            archive.CreateEntryFromFile(solutionXmlPath, "solution.xml");
-                        }
-
-                        // Clean up temporary directory
-                        Directory.Delete(tempDirectory, true);
-
                         currentJob.Status = "Successful";
-                        currentJob.Output += Environment.NewLine + output2;
+                        currentJob.Output = output ?? string.Empty;
                     }
                 };
 
@@ -1005,6 +948,142 @@ namespace SolutionManager
                 else
                 {
                     StartJob(job);
+                }
+
+                string vjobid = "";
+
+                if(solutionStrategyRadioButtons.SelectedItem.ToString() != "unchanged")
+                {
+                    var versionJob = new RunningJob
+                    {
+                        Name = $"Version Increment: {selectedSolution.FriendlyName}",
+                        Status = "Waiting",
+                        Timestamp = DateTime.Now,
+                        Environment = selectedEnvironment.EnvironmentId,
+                        PredecessorId = job.Id,
+                        JobLogic = async (currentJob) =>
+                        {
+                            // Extract solution.xml from the zip file
+                            string tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                            Directory.CreateDirectory(tempDirectory);
+                            string solutionXmlPath = Path.Combine(tempDirectory, "solution.xml");
+
+                            using (ZipArchive archive = ZipFile.OpenRead(zipFilePath))
+                            {
+                                var solutionEntry = archive.GetEntry("solution.xml");
+                                if (solutionEntry != null)
+                                {
+                                    solutionEntry.ExtractToFile(solutionXmlPath, true);
+                                }
+                                else
+                                {
+                                    currentJob.Status = "Failed";
+                                    currentJob.Output += Environment.NewLine + "solution.xml not found in the zip file.";
+                                    return;
+                                }
+                            }
+
+                            // Run the pac solution version command on the extracted solution.xml
+                            var command = $"pac solution version -sp '{solutionXmlPath}'";
+                            switch (solutionStrategyRadioButtons.SelectedItem)
+                            {
+                                case RadioButton customRadioButton when customRadioButton.Content.ToString() == "Custom":
+                                    if (!string.IsNullOrEmpty(releaseVer.Text))
+                                    {
+                                        command += $" --revisionversion {releaseVer.Text}";
+                                    }
+                                    if (!string.IsNullOrEmpty(buildVer.Text))
+                                    {
+                                        command += $" --buildversion {buildVer.Text}";
+                                    }
+                                    break;
+                                case RadioButton solutionStrategyRadioButton when solutionStrategyRadioButton.Content.ToString() == "Solution Strategy":
+                                    command += " -s solution";
+                                    break;
+                            }
+                            string? output = await RunPowerShellScriptAsync(command);
+                            if (string.IsNullOrEmpty(output) || !output.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
+                            {
+                                currentJob.Status = "Failed";
+                                currentJob.Output += Environment.NewLine + output ?? string.Empty;
+                                return;
+                            }
+
+                            // Replace the solution.xml in the zip file with the updated version
+                            using (ZipArchive archive = ZipFile.Open(zipFilePath, ZipArchiveMode.Update))
+                            {
+                                var solutionEntry = archive.GetEntry("solution.xml");
+                                solutionEntry?.Delete();
+                                archive.CreateEntryFromFile(solutionXmlPath, "solution.xml");
+                            }
+
+                            // Clean up temporary directory
+                            Directory.Delete(tempDirectory, true);
+
+                            currentJob.Status = "Successful";
+                            currentJob.Output = output ?? string.Empty;
+                        }
+                    };
+                    vjobid = versionJob.Id;
+
+                    EnqueueJob(versionJob);
+                }
+
+                if (CheckInAfterExport.IsChecked == true)
+                {
+                    var checkinJob = new RunningJob
+                    {
+                        Name = $"Git Check-in: {selectedSolution.FriendlyName}",
+                        Status = "Waiting",
+                        Timestamp = DateTime.Now,
+                        Environment = selectedEnvironment.EnvironmentId,
+                        PredecessorId = solutionStrategyRadioButtons.SelectedItem.ToString() != "unchanged" ? vjobid : job.Id,
+                        JobLogic = async (currentJob) =>
+                        {
+                            try
+                            {
+                                // Run git add
+                                string gitAddCommand = "git add .";
+                                string? gitAddOutput = await RunPowerShellScriptAsync(gitAddCommand, zipFilePath);
+                                if (string.IsNullOrEmpty(gitAddOutput))
+                                {
+                                    currentJob.Status = "Failed";
+                                    currentJob.Output = "Git add failed.";
+                                    return;
+                                }
+
+                                // Run git commit
+                                string gitCommitCommand = "git commit -m \"Solution exported via Air Traffic Control Tower\"";
+                                string? gitCommitOutput = await RunPowerShellScriptAsync(gitCommitCommand, zipFilePath);
+                                if (string.IsNullOrEmpty(gitCommitOutput))
+                                {
+                                    currentJob.Status = "Failed";
+                                    currentJob.Output = "Git commit failed.";
+                                    return;
+                                }
+
+                                // Run git push
+                                string gitPushCommand = "git push";
+                                string? gitPushOutput = await RunPowerShellScriptAsync(gitPushCommand, zipFilePath);
+                                if (string.IsNullOrEmpty(gitPushOutput))
+                                {
+                                    currentJob.Status = "Failed";
+                                    currentJob.Output = "Git push failed.";
+                                    return;
+                                }
+
+                                currentJob.Status = "Successful";
+                                currentJob.Output = "Git add, commit, and push succeeded.";
+                            }
+                            catch (Exception ex)
+                            {
+                                currentJob.Status = "Failed";
+                                currentJob.Output = $"Error: {ex.Message}";
+                            }
+                        }
+                    };
+
+                    EnqueueJob(checkinJob);
                 }
             }
             else
@@ -1076,17 +1155,17 @@ namespace SolutionManager
             {
                 switch (radioButton.Content.ToString())
                 {
-                    case "Export":
+                    case "1. Export":
                         exportContent.Visibility = Visibility.Visible;
                         settingsContent.Visibility = Visibility.Collapsed;
                         importContent.Visibility = Visibility.Collapsed;
                         break;
-                    case "Update":
+                    case "2. Settings":
                         exportContent.Visibility = Visibility.Collapsed;
                         settingsContent.Visibility = Visibility.Visible;
                         importContent.Visibility = Visibility.Collapsed;
                         break;
-                    case "Import":
+                    case "3. Import":
                         exportContent.Visibility = Visibility.Collapsed;
                         settingsContent.Visibility = Visibility.Collapsed;
                         importContent.Visibility = Visibility.Visible;
@@ -1261,6 +1340,16 @@ namespace SolutionManager
                 // Handle the case where no environment is selected
                 Debug.WriteLine("No environment selected.");
             }
+        }
+
+        private void CheckInAfterExport_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            CheckInInfoBar.IsOpen = true;
+        }
+
+        private void CheckInAfterExport_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            CheckInInfoBar.IsOpen = false;
         }
         #endregion
 

@@ -14,12 +14,21 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Xml.Linq;
 using Windows.Storage;
-using Microsoft.UI.Xaml.Input;
+using Microsoft.Identity.Client;
+using Microsoft.PowerPlatform.Dataverse.Client;
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace SolutionManager
 {
     public sealed partial class MainWindow : Window
     {
+        private static IConfidentialClientApplication _msalClient;
+        private static string _clientId = ""; // Replace with your client ID
+        private static string _clientSecret = ""; // Replace with your client secret
+        private static string _tenantId = ""; // Replace with your tenant ID
+        private static string[] _scopes = [""]; // Define the scopes you need
+
         List<AuthProfile> authProfiles = new();
         List<EnvironmentProfile> environmentProfiles = new();
         List<SolutionProfile> solutionProfiles = new();
@@ -27,12 +36,14 @@ namespace SolutionManager
         ObservableCollection<string> matchingSettings = new();
         private Queue<RunningJob> jobQueue = new();
         object settingsObject;
+        string userToken = null;
 
         public MainWindow()
         {
             this.InitializeComponent();
             jobsListBox.ItemsSource = jobs;
             matchingConfigsListBox.ItemsSource = matchingSettings;
+            matchingUploadConfigsListBox.ItemsSource = matchingSettings;
 
             // Set default file paths for config CSV files
             string binDirectory = AppContext.BaseDirectory;
@@ -49,9 +60,18 @@ namespace SolutionManager
             };
         }
 
-        public void Grid_Loaded(object sender, RoutedEventArgs e)
+        public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
             _ = InitializeAuthProfilesAsync();
+            InitializeMsalClient();
+            authWebView.Visibility = Visibility.Visible;
+            var authResult = await SignInUserAsync();
+            if (authResult != null)
+            {
+                userToken = authResult.AccessToken;
+            }
+            authWebView.Visibility = Visibility.Collapsed;
+
             var storyboard = new Storyboard();
 
             var fadeAnimation = CreateFadeAnimation();
@@ -377,33 +397,6 @@ namespace SolutionManager
         #endregion
 
         #region Event Handlers
-        private async void EnvironmentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (environmentList.SelectedItem is EnvironmentProfile selectedEnvironment)
-            {
-                solutionsListPanel.Visibility = Visibility.Visible;
-                progressRingOverlay.Visibility = Visibility.Visible;
-                solutionDetailsPanel.Visibility = Visibility.Collapsed;
-
-                // Retrieve the list of solutions for the selected environment
-                string? output = await RunPowerShellScriptAsync($"pac solution list -env {selectedEnvironment.EnvironmentId}");
-                if (!string.IsNullOrEmpty(output))
-                {
-                    // Store the output in a string variable
-                    string solutionListOutput = output;
-                    Debug.WriteLine(solutionListOutput);
-
-                    // Parse the solution profiles
-                    solutionProfiles = ParseSolutionProfiles(solutionListOutput);
-                    solutionsList.ItemsSource = solutionProfiles;
-                }
-            }
-            else
-            {
-                solutionsListPanel.Visibility = Visibility.Collapsed;
-            }
-            progressRingOverlay.Visibility = Visibility.Collapsed;
-        }
 
         private async void BrowseFolderButton_Click(object sender, RoutedEventArgs e)
         {
@@ -440,12 +433,7 @@ namespace SolutionManager
             {
                 { "importZipFileBrowse", ".zip" },
                 { "importJsonFileBrowse", ".json" },
-                { "updateGuidsZipBrowse", ".zip" },
-                { "updateGuidsCsvBrowse", ".csv" },
-                { "settingsSolutionPathBrowse", ".zip" },
-                { "crCsvFilePathBrowse", ".csv" },
-                { "evCsvFilePathBrowse", ".csv" }
-
+                { "settingsSolutionPathBrowse", ".zip" }
             };
 
             if (sender is Button button && fileTypeFilters.TryGetValue(button.Name, out string? fileType))
@@ -462,51 +450,20 @@ namespace SolutionManager
                     {
                         case "importZipFileBrowse":
                             importZipPathTextBox.Text = file.Path;
+                            settingsSolutionZipTextBox.Text = file.Path;
+                            CheckStoredSettings(file.Path);
                             break;
                         case "importJsonFileBrowse":
                             importJsonPathTextBox.Text = file.Path;
                             break;
                         case "settingsSolutionPathBrowse":
                             settingsSolutionZipTextBox.Text = file.Path;
+                            importZipPathTextBox.Text = file.Path;
                             CheckStoredSettings(file.Path);
                             break;
                     }
                 }
             }
-        }
-
-        private string GetSettingsFilePath(string solutionZipPath)
-        {
-            string tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(tempDirectory);
-
-            try
-            {
-                using (ZipArchive archive = ZipFile.OpenRead(solutionZipPath))
-                {
-                    var solutionEntry = archive.GetEntry("solution.xml");
-                    if (solutionEntry != null)
-                    {
-                        string solutionXmlPath = Path.Combine(tempDirectory, "solution.xml");
-                        solutionEntry.ExtractToFile(solutionXmlPath);
-
-                        var doc = XDocument.Load(solutionXmlPath);
-                        var solutionName = doc.Descendants("UniqueName").FirstOrDefault()?.Value;
-
-                        if (!string.IsNullOrEmpty(solutionName))
-                        {
-                            string binDirectory = AppContext.BaseDirectory;
-                            return Path.Combine(binDirectory, $"{solutionName}.settings.json");
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                Directory.Delete(tempDirectory, true);
-            }
-
-            throw new InvalidOperationException("Solution name not found in solution.xml or solution.xml not found in the provided zip file.");
         }
 
         private async void AddSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -528,25 +485,38 @@ namespace SolutionManager
                 // Prompt the user to enter a target environment name
                 var dialog = new ContentDialog
                 {
-                    Title = "Enter Target Environment",
-                    Content = new TextBox { PlaceholderText = "Target Environment Name" },
+                    Title = "Select Target Environment",
                     PrimaryButtonText = "OK",
                     CloseButtonText = "Cancel",
                     XamlRoot = this.Content.XamlRoot
                 };
 
+                var listBox = new ListBox
+                {                    
+                    ItemsSource = environmentProfiles,
+                    DisplayMemberPath = "DisplayName"
+                };
+
+                var scrollViewer = new ScrollViewer
+                {
+                    Content = listBox,
+                    MaxHeight = 300 // Set a maximum height for the ScrollViewer
+                };
+
+                dialog.Content = scrollViewer;
+
                 var result = await dialog.ShowAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    var textBox = (TextBox)dialog.Content;
-                    string targetEnvironment = textBox.Text;
-
-                    if (string.IsNullOrEmpty(targetEnvironment))
+                    var selectedEnvironment = (EnvironmentProfile)listBox.SelectedItem;
+                    if (selectedEnvironment == null)
                     {
-                        // Handle the case where the user did not enter a target environment
-                        settingsLogTextBlock.Text += "Target environment not specified." + Environment.NewLine;
+                        // Handle the case where no environment is selected
+                        settingsLogTextBlock.Text += "Target environment not selected." + Environment.NewLine;
                         return;
                     }
+
+                    string targetEnvironment = selectedEnvironment.DisplayName;
 
                     try
                     {
@@ -597,66 +567,16 @@ namespace SolutionManager
                         }
 
                         string message = $"Settings file {settingsFilePath} updated.";
-                        settingsLogTextBlock.Text += message + Environment.NewLine;
+                        settingsLogTextBlock.Text = message + Environment.NewLine;
 
                         CheckStoredSettings(settingsSolutionZipTextBox.Text);
                     }
                     catch (Exception ex)
                     {
                         string message = $"Error: {ex.Message}";
-                        settingsLogTextBlock.Text += message + Environment.NewLine;
+                        settingsLogTextBlock.Text = message + Environment.NewLine;
                     }
                 }
-            }
-        }
-
-        private void CheckStoredSettings(string path)
-        {
-            try
-            {
-                string settingsFilePath = GetSettingsFilePath(path);
-
-                if (File.Exists(settingsFilePath))
-                {
-                    string jsonContent = File.ReadAllText(settingsFilePath);
-                    using JsonDocument document = JsonDocument.Parse(jsonContent);
-                    JsonElement root = document.RootElement;
-
-                    matchingSettings.Clear();
-
-                    if (root.TryGetProperty("Environments", out JsonElement environments))
-                    {
-                        foreach (JsonElement env in environments.EnumerateArray())
-                        {
-                            foreach (JsonProperty envProperty in env.EnumerateObject())
-                            {
-                                matchingSettings.Add(envProperty.Name);
-                            }
-                        }
-                    }
-
-                    string message = $"Settings file {settingsFilePath} found.";
-                    settingsLogTextBlock.Text += message + Environment.NewLine;
-                    settingsResults.Visibility = Visibility.Visible;
-                    matchingConfigs.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    string message = $"Settings file {settingsFilePath} not found.";
-                    settingsLogTextBlock.Text += message + Environment.NewLine;
-                    matchingConfigs.Visibility = Visibility.Visible;
-                    matchingConfigsListBox.Visibility = Visibility.Collapsed;
-                    matchingConfigsNoneBox.Visibility = Visibility.Visible;
-                    settingsResults.Visibility = Visibility.Visible;
-                }
-            }
-            catch (Exception ex)
-            {
-                string message = $"Error: {ex.Message}";
-                settingsLogTextBlock.Text += message + Environment.NewLine;
-                matchingConfigsListBox.Visibility = Visibility.Collapsed;
-                matchingConfigsNoneBox.Visibility = Visibility.Visible;
-                settingsResults.Visibility = Visibility.Visible;
             }
         }
 
@@ -691,13 +611,14 @@ namespace SolutionManager
 
         private async void ValidateSettingsButton_Click(object sender, RoutedEventArgs e)
         {
+            settingsLogTextBlock.Text = "Validating settings files..." + Environment.NewLine + Environment.NewLine;
             try
             {
                 string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
 
                 if (!File.Exists(settingsFilePath))
                 {
-                    settingsLogTextBlock.Text += "Settings file not found." + Environment.NewLine;
+                    settingsLogTextBlock.Text = "Settings file not found." + Environment.NewLine;
                     return;
                 }
 
@@ -711,7 +632,7 @@ namespace SolutionManager
 
                 if (string.IsNullOrEmpty(output) || !File.Exists(newSettingsFilePath))
                 {
-                    settingsLogTextBlock.Text += "Failed to generate new settings file." + Environment.NewLine;
+                    settingsLogTextBlock.Text = "Failed to generate new settings file." + Environment.NewLine;
                     return;
                 }
 
@@ -746,90 +667,6 @@ namespace SolutionManager
                 string message = $"Error: {ex.Message}";
                 settingsLogTextBlock.Text += message + Environment.NewLine;
             }
-        }
-
-        private void ValidateEnvironmentSettings(string environmentName, JsonElement newSettings, JsonElement storedSettings)
-        {
-            bool hasIssues = false;
-            var issues = new List<string>();
-
-            if (newSettings.TryGetProperty("EnvironmentVariables", out JsonElement newEnvVars) &&
-                storedSettings.TryGetProperty("EnvironmentVariables", out JsonElement storedEnvVars))
-            {
-                foreach (JsonElement newEnvVar in newEnvVars.EnumerateArray())
-                {
-                    string schemaName = newEnvVar.GetProperty("SchemaName").GetString();
-                    string? newValue = GetJsonElementValueAsString(newEnvVar, "Value");
-                    string? newDefaultValue = GetJsonElementValueAsString(newEnvVar, "DefaultValue");
-
-                    JsonElement? storedEnvVar = storedEnvVars.EnumerateArray().FirstOrDefault(ev => ev.GetProperty("SchemaName").GetString() == schemaName);
-
-                    string? storedValue = null;
-                    string? storedDefaultValue = null;
-
-                    if (storedEnvVar.HasValue)
-                    {
-                        storedValue = GetJsonElementValueAsString(storedEnvVar.Value, "Value");
-                        storedDefaultValue = GetJsonElementValueAsString(storedEnvVar.Value, "DefaultValue");
-                    }
-
-                    if (string.IsNullOrEmpty(newValue) && string.IsNullOrEmpty(newDefaultValue) &&
-                        string.IsNullOrEmpty(storedValue) && string.IsNullOrEmpty(storedDefaultValue))
-                    {
-                        hasIssues = true;
-                        issues.Add($"Environment Variable '{schemaName}' has both Value and DefaultValue missing.");
-                    }
-                }
-            }
-
-            if (hasIssues)
-            {
-                settingsLogTextBlock.Text += $"Issues found in environment '{environmentName}':" + Environment.NewLine;
-                foreach (var issue in issues)
-                {
-                    settingsLogTextBlock.Text += issue + Environment.NewLine;
-                }
-
-                // Remove and re-add the item in the ListBox
-                if (matchingSettings.Contains(environmentName))
-                {
-                    matchingSettings.Remove(environmentName);
-                    matchingSettings.Add($"⚠️ {environmentName}");
-                }
-            }
-        }
-
-        private string? GetJsonElementValueAsString(JsonElement element, string propertyName)
-        {
-            try
-            {
-                if (element.ValueKind != JsonValueKind.Undefined && element.TryGetProperty(propertyName, out JsonElement propertyElement))
-                {
-                    if (propertyElement.ValueKind == JsonValueKind.Undefined)
-                    {
-                        Debug.WriteLine($"Property '{propertyName}' is undefined.");
-                        return null;
-                    }
-
-                    return propertyElement.ValueKind switch
-                    {
-                        JsonValueKind.String => propertyElement.GetString(),
-                        JsonValueKind.Number => propertyElement.GetRawText(),
-                        JsonValueKind.True => "true",
-                        JsonValueKind.False => "false",
-                        _ => null
-                    };
-                }
-                else
-                {
-                    Debug.WriteLine($"Property '{propertyName}' not found or element is undefined.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error accessing property '{propertyName}': {ex.Message}");
-            }
-            return null;
         }
 
         private void RemoveSelectedSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -874,16 +711,101 @@ namespace SolutionManager
                     string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
                     File.WriteAllText(settingsFilePath, updatedJsonContent);
 
-                    settingsLogTextBlock.Text += $"Removed selected settings from {settingsFilePath}." + Environment.NewLine;
+                    settingsLogTextBlock.Text = $"Removed selected settings from {settingsFilePath}." + Environment.NewLine;
                 }
             }
         }
 
-        private void ExportButton_Click(object sender, RoutedEventArgs e)
+        private async void ExportButton_Click(object sender, RoutedEventArgs e)
         {
             if (environmentList.SelectedItem is EnvironmentProfile selectedEnvironment &&
                 solutionsList.SelectedItem is SolutionProfile selectedSolution)
             {
+                string preVersionJobId = "";
+                if (incrementSolutionToggle.IsOn)
+                {
+                    var serviceClient = GetServiceClient(selectedEnvironment.EnvironmentUrl);
+                    var preVersionJob = new RunningJob
+                    {
+                        Name = $"Version Increment in Dataverse: {selectedSolution.FriendlyName}",
+                        Status = "Waiting",
+                        Timestamp = DateTime.Now,
+                        Environment = selectedEnvironment.EnvironmentId,
+                        JobLogic = async (currentJob) =>
+                        {
+                            var query = new QueryExpression("solution")
+                            {
+                                ColumnSet = new ColumnSet("version"),
+                                Criteria = new FilterExpression
+                                {
+                                    Conditions =
+                                {
+                                    new ConditionExpression("uniquename", ConditionOperator.Equal, selectedSolution.UniqueName)
+                                }
+                                }
+                            };
+
+                            var solutions = serviceClient.RetrieveMultiple(query).Entities;
+                            if (solutions.Count > 0)
+                            {
+                                var solution = solutions.First();
+                                var version = solution.GetAttributeValue<string>("version");
+
+                                var versionParts = version.Split('.');
+
+                                DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    if (customStrategyRadioButton.IsChecked ?? false)
+                                    {
+                                        if (!string.IsNullOrEmpty(releaseVer.Text))
+                                        {
+                                            versionParts[2] = string.IsNullOrEmpty(releaseVer.Text) ? "0" : releaseVer.Text;
+                                        }
+                                        if (!string.IsNullOrEmpty(buildVer.Text))
+                                        {
+                                            versionParts[3] = string.IsNullOrEmpty(buildVer.Text) ? "0" : buildVer.Text;
+                                        }
+                                    }
+                                    else if (solutionStrategyRadioButton.IsChecked ?? false)
+                                    {
+                                        versionParts[2] = (int.Parse(versionParts[2]) + 1).ToString();
+                                        versionParts[3] = "0";
+                                    }
+
+                                    var newVersion = string.Join(".", versionParts);
+                                    solution["version"] = newVersion;
+                                    serviceClient.Update(solution);
+
+                                    currentJob.Status = "Successful";
+                                    currentJob.Output = $"Version incremented in Dataverse to {newVersion}.";
+                                });
+                            }
+                            else
+                            {
+                                currentJob.Status = "Failed";
+                                currentJob.Output = "Solution not found in Dataverse.";
+                            }
+                        }
+                    };
+                    preVersionJobId = preVersionJob.Id;
+
+                    // Check for existing jobs with the same environment
+                    var existingJob = jobs
+                        .Where(j => j.Environment == selectedEnvironment.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
+                        .OrderByDescending(j => j.Timestamp)
+                        .FirstOrDefault();
+
+                    if (existingJob != null)
+                    {
+                        preVersionJob.PredecessorId = existingJob.Id;
+                        EnqueueJob(preVersionJob);
+                    }
+                    else
+                    {
+                        StartJob(preVersionJob);
+                    }
+                }
+
                 var zipFilePath = zipFilePathTextBox.Text;
                 var exportAsManaged = exportAsManagedCheckBox.IsChecked ?? false;
                 var overwrite = overwriteCheckBox.IsChecked ?? false;
@@ -934,25 +856,33 @@ namespace SolutionManager
                     }
                 };
 
-                // Check for existing jobs with the same environment
-                var existingJob = jobs
-                    .Where(j => j.Environment == selectedEnvironment.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
-                    .OrderByDescending(j => j.Timestamp)
-                    .FirstOrDefault();
-
-                if (existingJob != null)
+                if(incrementSolutionToggle.IsOn)
                 {
-                    job.PredecessorId = existingJob.Id;
+                    job.PredecessorId = preVersionJobId;
                     EnqueueJob(job);
                 }
                 else
                 {
-                    StartJob(job);
+                    // Check for existing jobs with the same environment
+                    var existingJob = jobs
+                        .Where(j => j.Environment == selectedEnvironment.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
+                        .OrderByDescending(j => j.Timestamp)
+                        .FirstOrDefault();
+
+                    if (existingJob != null)
+                    {
+                        job.PredecessorId = existingJob.Id;
+                        EnqueueJob(job);
+                    }
+                    else
+                    {
+                        StartJob(job);
+                    }
                 }
 
                 string vjobid = "";
 
-                if(solutionStrategyRadioButtons.SelectedItem.ToString() != "unchanged")
+                if (!(noStrategyRadioButton.IsChecked ?? false) && !incrementSolutionToggle.IsOn)
                 {
                     var versionJob = new RunningJob
                     {
@@ -985,21 +915,20 @@ namespace SolutionManager
 
                             // Run the pac solution version command on the extracted solution.xml
                             var command = $"pac solution version -sp '{solutionXmlPath}'";
-                            switch (solutionStrategyRadioButtons.SelectedItem)
+                            if (customStrategyRadioButton.IsChecked ?? false)
                             {
-                                case RadioButton customRadioButton when customRadioButton.Content.ToString() == "Custom":
-                                    if (!string.IsNullOrEmpty(releaseVer.Text))
-                                    {
-                                        command += $" --revisionversion {releaseVer.Text}";
-                                    }
-                                    if (!string.IsNullOrEmpty(buildVer.Text))
-                                    {
-                                        command += $" --buildversion {buildVer.Text}";
-                                    }
-                                    break;
-                                case RadioButton solutionStrategyRadioButton when solutionStrategyRadioButton.Content.ToString() == "Solution Strategy":
-                                    command += " -s solution";
-                                    break;
+                                if (!string.IsNullOrEmpty(releaseVer.Text))
+                                {
+                                    command += $" --revisionversion {releaseVer.Text}";
+                                }
+                                if (!string.IsNullOrEmpty(buildVer.Text))
+                                {
+                                    command += $" --buildversion {buildVer.Text}";
+                                }
+                            }
+                            else if (solutionStrategyRadioButton.IsChecked ?? false)
+                            {
+                                command += " -s solution";
                             }
                             string? output = await RunPowerShellScriptAsync(command);
                             if (string.IsNullOrEmpty(output) || !output.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
@@ -1025,7 +954,6 @@ namespace SolutionManager
                         }
                     };
                     vjobid = versionJob.Id;
-
                     EnqueueJob(versionJob);
                 }
 
@@ -1037,7 +965,7 @@ namespace SolutionManager
                         Status = "Waiting",
                         Timestamp = DateTime.Now,
                         Environment = selectedEnvironment.EnvironmentId,
-                        PredecessorId = solutionStrategyRadioButtons.SelectedItem.ToString() != "unchanged" ? vjobid : job.Id,
+                        PredecessorId = (noStrategyRadioButton.IsChecked ?? false || incrementSolutionToggle.IsOn) ? job.Id : vjobid,
                         JobLogic = async (currentJob) =>
                         {
                             try
@@ -1137,15 +1065,323 @@ namespace SolutionManager
             }
         }
 
-        private void SolutionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void ChangeAuthProfileButton_Click(object sender, RoutedEventArgs e)
         {
-            if (solutionsList.SelectedItem is SolutionProfile selectedSolution)
+            var dialog = new ContentDialog
             {
-                solutionDetailsPanel.Visibility = Visibility.Visible;
+                Title = "Select Authentication Profile",
+                Content = new ListBox
+                {
+                    ItemsSource = authProfiles,
+                    DisplayMemberPath = "DisplayName"
+                },
+                PrimaryButtonText = "OK",
+                CloseButtonText = "Cancel",
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            dialog.PrimaryButtonClick += async (s, args) =>
+            {
+                var listBox = (ListBox)dialog.Content;
+                var selectedProfile = (AuthProfile)listBox.SelectedItem;
+                if (selectedProfile != null)
+                {
+                    authProfileText.Text = $"Auth Profile: {selectedProfile.Name}";
+                    // Set the selected profile as active
+                    progressRingOverlay.Visibility = Visibility.Visible;
+                    Debug.WriteLine("ProgressRingOverlay set to Visible");
+                    await RunPowerShellScriptAsync($"pac auth select --index {selectedProfile.Index}");
+                    // Retrieve the list of environments
+                    await RetrieveEnvironmentProfilesAsync();
+                    progressRingOverlay.Visibility = Visibility.Collapsed;
+                    Debug.WriteLine("ProgressRingOverlay set to Collapsed");
+                }
+            };
+
+            _ = dialog.ShowAsync();
+        }
+
+        private void ImportButton_Click(object sender, RoutedEventArgs e)
+        {
+
+            if (matchingUploadConfigsListBox.SelectedItems.Count > 0)
+            {
+                foreach (string targetName in matchingUploadConfigsListBox.SelectedItems)
+                {
+                    var target = environmentList.Items
+                        .Cast<EnvironmentProfile>()
+                        .FirstOrDefault(env => env.DisplayName == targetName);
+                    if (target != null)
+                    {
+                        var solutionFilePath = importZipPathTextBox.Text;
+                        var activatePlugins = activatePluginsCheckBox.IsChecked ?? false;
+                        var stageAndUpgrade = stageAndUpgradeCheckBox.IsChecked ?? false;
+                        var publishAfterImport = publishAfterImportCheckBox.IsChecked ?? false;
+                        var forceOverwrite = forceOverwriteCheckBox.IsChecked ?? false;
+
+                        string settingsFilePath = GetSettingsFilePath(solutionFilePath);
+                        string tempJsonFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.json");
+
+                        try
+                        {
+                            if (File.Exists(settingsFilePath))
+                            {
+                                string jsonContent = File.ReadAllText(settingsFilePath);
+                                using JsonDocument document = JsonDocument.Parse(jsonContent);
+                                JsonElement root = document.RootElement;
+
+                                if (root.TryGetProperty("Environments", out JsonElement environments))
+                                {
+                                    var targetEnvironment = environments.EnumerateArray()
+                                        .SelectMany(env => env.EnumerateObject())
+                                        .FirstOrDefault(envProperty => envProperty.Name == targetName);
+
+                                    if (targetEnvironment.Value.ValueKind != JsonValueKind.Undefined)
+                                    {
+                                        // Write the JSON object to a temporary file
+                                        File.WriteAllText(tempJsonFilePath, JsonSerializer.Serialize(targetEnvironment.Value, new JsonSerializerOptions { WriteIndented = true }));
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"Target environment '{targetName}' not found in settings file.");
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            // Construct the pac solution import command
+                            var command = $"pac solution import --environment {target.EnvironmentId} --path '{solutionFilePath}'";
+
+                            if (File.Exists(tempJsonFilePath))
+                            {
+                                command += $" --settings-file '{tempJsonFilePath}'";
+                            }
+
+                            if (activatePlugins)
+                            {
+                                command += " --activate-plugins";
+                            }
+
+                            if (stageAndUpgrade)
+                            {
+                                command += " --stage-and-upgrade";
+                            }
+
+                            if (publishAfterImport)
+                            {
+                                command += " --publish-changes";
+                            }
+
+                            if (forceOverwrite)
+                            {
+                                command += " --force-overwrite";
+                            }
+
+                            // Create a new job and add it to the jobs list
+                            var job = new RunningJob
+                            {
+                                Name = $"Import: {Path.GetFileName(solutionFilePath)}",
+                                Status = "Waiting",
+                                Timestamp = DateTime.Now,
+                                Environment = target.EnvironmentId,
+                                JobLogic = async (currentJob) =>
+                                {
+                                    string? output = await RunPowerShellScriptAsync(command);
+                                    currentJob.Output = output ?? string.Empty;
+                                    currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("success", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
+
+                                    // Delete the temporary JSON file
+                                    if (File.Exists(tempJsonFilePath))
+                                    {
+                                        File.Delete(tempJsonFilePath);
+                                    }
+                                }
+                            };
+
+                            // Check for existing jobs with the same environment
+                            var existingJob = jobs
+                                .Where(j => j.Environment == target.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
+                                .OrderByDescending(j => j.Timestamp)
+                                .FirstOrDefault();
+
+                            if (existingJob != null)
+                            {
+                                job.PredecessorId = existingJob.Id;
+                                EnqueueJob(job);
+                            }
+                            else
+                            {
+                                StartJob(job);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error processing target environment '{targetName}': {ex.Message}");
+                            // Ensure the temporary file is deleted in case of an error
+                            if (File.Exists(tempJsonFilePath))
+                            {
+                                File.Delete(tempJsonFilePath);
+                            }
+                        }
+                    }
+                }
             }
             else
             {
-                solutionDetailsPanel.Visibility = Visibility.Collapsed;
+                // Handle the case where no environment is selected
+                Debug.WriteLine("No environment selected.");
+            }
+        }
+
+        private void SettingsUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (matchingConfigsListBox.SelectedItem is string selectedConfig)
+            {
+                string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
+                try
+                {
+                    // Validate the JSON content
+                    string updatedContent = settingsUpdateTextBox.Text;
+                    if (!IsValidJson(updatedContent))
+                    {
+                        ShowErrorDialog("Invalid JSON format.");
+                        return;
+                    }
+
+                    string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+
+                    if (File.Exists(settingsFilePath))
+                    {
+                        string jsonContent = File.ReadAllText(settingsFilePath);
+                        using JsonDocument document = JsonDocument.Parse(jsonContent);
+                        JsonElement root = document.RootElement;
+
+                        if (root.TryGetProperty("Environments", out JsonElement environments))
+                        {
+                            var environmentsList = environments.EnumerateArray().ToList();
+                            for (int i = 0; i < environmentsList.Count; i++)
+                            {
+                                var env = environmentsList[i];
+                                if (env.TryGetProperty(selectedC, out JsonElement envObject))
+                                {
+                                    var updatedEnvObject = JsonDocument.Parse(settingsUpdateTextBox.Text).RootElement;
+                                    var updatedEnv = new Dictionary<string, JsonElement>
+                                    {
+                                        { selectedC, updatedEnvObject }
+                                    };
+
+                                    environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
+                                    break;
+                                }
+                            }
+
+                            var updatedJson = new
+                            {
+                                Environments = environmentsList
+                            };
+
+                            string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
+                            File.WriteAllText(settingsFilePath, updatedJsonContent);
+
+                            settingsLogTextBlock.Text = $"Settings for {selectedC} updated successfully." + Environment.NewLine;
+                            settingsLogTextBlock.Visibility = Visibility.Visible;
+                            settingsUpdateCommands.Visibility = Visibility.Collapsed;
+                            settingsUpdateTextBox.Visibility = Visibility.Collapsed;
+                            matchingConfigsListBox.SelectedItem = null;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                }
+            }
+        }
+
+        private void SettingsUpdateCancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (matchingConfigsListBox.SelectedItem is string selectedConfig)
+            {
+                string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
+                try
+                {
+                    string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+
+                    if (File.Exists(settingsFilePath))
+                    {
+                        string jsonContent = File.ReadAllText(settingsFilePath);
+                        using JsonDocument document = JsonDocument.Parse(jsonContent);
+                        JsonElement root = document.RootElement;
+
+                        if (root.TryGetProperty("Environments", out JsonElement environments))
+                        {
+                            foreach (JsonElement env in environments.EnumerateArray())
+                            {
+                                foreach (JsonProperty envProperty in env.EnumerateObject())
+                                {
+                                    if (envProperty.Name == selectedC)
+                                    {
+                                        string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
+                                        settingsUpdateTextBox.Text = jsonValue;
+                                        settingsLogTextBlock.Text = $"Changes for {selectedC} have been reverted." + Environment.NewLine;
+
+                                        matchingConfigsListBox.SelectedItem = null;
+                                        settingsUpdateTextBox.Visibility = Visibility.Collapsed;
+                                        settingsUpdateCommands.Visibility = Visibility.Collapsed;
+                                        settingsLogTextBlock.Visibility = Visibility.Visible;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                }
+            }
+        }
+
+        private void EditSelectedSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (matchingConfigsListBox.SelectedItem is string selectedConfig)
+            {
+                string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
+                try
+                {
+                    string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+
+                    if (File.Exists(settingsFilePath))
+                    {
+                        string jsonContent = File.ReadAllText(settingsFilePath);
+                        using JsonDocument document = JsonDocument.Parse(jsonContent);
+                        JsonElement root = document.RootElement;
+
+                        if (root.TryGetProperty("Environments", out JsonElement environments))
+                        {
+                            foreach (JsonElement env in environments.EnumerateArray())
+                            {
+                                foreach (JsonProperty envProperty in env.EnumerateObject())
+                                {
+                                    if (envProperty.Name == selectedC)
+                                    {
+                                        string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
+                                        settingsUpdateTextBox.Text = jsonValue;
+                                        settingsUpdateTextBox.Visibility = Visibility.Visible;
+                                        settingsUpdateCommands.Visibility = Visibility.Visible;
+                                        settingsLogTextBlock.Visibility = Visibility.Collapsed;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                }
             }
         }
 
@@ -1204,40 +1440,44 @@ namespace SolutionManager
             }
         }
 
-        private void ChangeAuthProfileButton_Click(object sender, RoutedEventArgs e)
+        private async void EnvironmentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var dialog = new ContentDialog
+            if (environmentList.SelectedItem is EnvironmentProfile selectedEnvironment)
             {
-                Title = "Select Authentication Profile",
-                Content = new ListBox
-                {
-                    ItemsSource = authProfiles,
-                    DisplayMemberPath = "DisplayName"
-                },
-                PrimaryButtonText = "OK",
-                CloseButtonText = "Cancel",
-                XamlRoot = this.Content.XamlRoot
-            };
+                solutionsListPanel.Visibility = Visibility.Visible;
+                progressRingOverlay.Visibility = Visibility.Visible;
+                solutionDetailsPanel.Visibility = Visibility.Collapsed;
 
-            dialog.PrimaryButtonClick += async (s, args) =>
-            {
-                var listBox = (ListBox)dialog.Content;
-                var selectedProfile = (AuthProfile)listBox.SelectedItem;
-                if (selectedProfile != null)
+                // Retrieve the list of solutions for the selected environment
+                string? output = await RunPowerShellScriptAsync($"pac solution list -env {selectedEnvironment.EnvironmentId}");
+                if (!string.IsNullOrEmpty(output))
                 {
-                    authProfileText.Text = $"Auth Profile: {selectedProfile.Name}";
-                    // Set the selected profile as active
-                    progressRingOverlay.Visibility = Visibility.Visible;
-                    Debug.WriteLine("ProgressRingOverlay set to Visible");
-                    await RunPowerShellScriptAsync($"pac auth select --index {selectedProfile.Index}");
-                    // Retrieve the list of environments
-                    await RetrieveEnvironmentProfilesAsync();
-                    progressRingOverlay.Visibility = Visibility.Collapsed;
-                    Debug.WriteLine("ProgressRingOverlay set to Collapsed");
+                    // Store the output in a string variable
+                    string solutionListOutput = output;
+                    Debug.WriteLine(solutionListOutput);
+
+                    // Parse the solution profiles
+                    solutionProfiles = ParseSolutionProfiles(solutionListOutput);
+                    solutionsList.ItemsSource = solutionProfiles;
                 }
-            };
+            }
+            else
+            {
+                solutionsListPanel.Visibility = Visibility.Collapsed;
+            }
+            progressRingOverlay.Visibility = Visibility.Collapsed;
+        }
 
-            _ = dialog.ShowAsync();
+        private void SolutionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (solutionsList.SelectedItem is SolutionProfile selectedSolution)
+            {
+                solutionDetailsPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                solutionDetailsPanel.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void JobsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1261,99 +1501,167 @@ namespace SolutionManager
         {
             if (matchingConfigsListBox.SelectedItem is string selectedConfig)
             {
+                
+                string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
                 removeSelectedSettingsButton.Visibility = Visibility.Visible;
-            }
-        }
-
-        private void ImportButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (importEnvironmentList.SelectedItem is EnvironmentProfile selectedEnvironment)
-            {
-                var solutionFilePath = importZipPathTextBox.Text;
-                var settingsFilePath = importJsonPathTextBox.Text;
-                var activatePlugins = activatePluginsCheckBox.IsChecked ?? false;
-                var stageAndUpgrade = stageAndUpgradeCheckBox.IsChecked ?? false;
-                var publishAfterImport = publishAfterImportCheckBox.IsChecked ?? false;
-                var forceOverwrite = forceOverwriteCheckBox.IsChecked ?? false;
-
-                // Construct the pac solution import command
-                var command = $"pac solution import --environment {selectedEnvironment.EnvironmentId} --path \"{solutionFilePath}\"";
-
-                if (!string.IsNullOrEmpty(settingsFilePath))
+                editSelectedSettingsButton.Visibility = Visibility.Visible;
+                try
                 {
-                    command += $" --settings-file \"{settingsFilePath}\"";
-                }
+                    string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
 
-                if (activatePlugins)
-                {
-                    command += " --activate-plugins";
-                }
-
-                if (stageAndUpgrade)
-                {
-                    command += " --stage-and-upgrade";
-                }
-
-                if (publishAfterImport)
-                {
-                    command += " --publish-changes";
-                }
-
-                if (forceOverwrite)
-                {
-                    command += " --force-overwrite";
-                }
-
-                // Create a new job and add it to the jobs list
-                var job = new RunningJob
-                {
-                    Name = $"Import: {Path.GetFileName(solutionFilePath)}",
-                    Status = "Waiting",
-                    Timestamp = DateTime.Now,
-                    Environment = selectedEnvironment.EnvironmentId,
-                    JobLogic = async (currentJob) =>
+                    if (File.Exists(settingsFilePath))
                     {
-                        string? output = await RunPowerShellScriptAsync(command);
-                        currentJob.Output = output ?? string.Empty;
-                        currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("succeeded", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
+                        string jsonContent = File.ReadAllText(settingsFilePath);
+                        using JsonDocument document = JsonDocument.Parse(jsonContent);
+                        JsonElement root = document.RootElement;
+
+                        if (root.TryGetProperty("Environments", out JsonElement environments))
+                        {
+                            foreach (JsonElement env in environments.EnumerateArray())
+                            {
+                                foreach (JsonProperty envProperty in env.EnumerateObject())
+                                {
+                                    if (envProperty.Name == selectedC)
+                                    {
+                                        string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
+
+                                        if (selectedConfig.IndexOf("⚠️ ") != -1)
+                                        {
+                                            settingsUpdateTextBox.Text = jsonValue;
+                                            settingsUpdateTextBox.Visibility = Visibility.Visible;
+                                            settingsUpdateCommands.Visibility = Visibility.Visible;
+                                            settingsLogTextBlock.Visibility = Visibility.Collapsed;
+                                            return;
+                                        }
+                                        else
+                                        {
+                                            settingsLogTextBlock.Text = jsonValue;
+                                            settingsLogTextBlock.Visibility = Visibility.Visible;
+                                            settingsUpdateTextBox.Visibility = Visibility.Collapsed;
+                                            settingsUpdateCommands.Visibility = Visibility.Collapsed;
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                };
-
-                // Check for existing jobs with the same environment
-                var existingJob = jobs
-                    .Where(j => j.Environment == selectedEnvironment.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
-                    .OrderByDescending(j => j.Timestamp)
-                    .FirstOrDefault();
-
-                if (existingJob != null)
-                {
-                    job.PredecessorId = existingJob.Id;
-                    EnqueueJob(job);
                 }
-                else
+                catch (Exception ex)
                 {
-                    StartJob(job);
+                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
                 }
             }
             else
             {
-                // Handle the case where no environment is selected
-                Debug.WriteLine("No environment selected.");
+                removeSelectedSettingsButton.Visibility = Visibility.Collapsed;
+                editSelectedSettingsButton.Visibility = Visibility.Collapsed;
             }
         }
 
-        private void CheckInAfterExport_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            CheckInInfoBar.IsOpen = true;
-        }
-
-        private void CheckInAfterExport_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-            CheckInInfoBar.IsOpen = false;
-        }
         #endregion
 
         #region Helper Methods
+
+        private void InitializeMsalClient()
+        {
+            _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
+                .WithClientSecret(_clientSecret)
+                .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+                .Build();
+        }
+
+        private ServiceClient GetServiceClient(string organizationUrl)
+        {
+            try
+            {
+                var serviceClient = new ServiceClient(
+                    new Uri(organizationUrl),
+                    _clientId,
+                    _clientSecret,
+                    true
+                );
+                return serviceClient;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error initializing ServiceClient: {ex.Message}");
+                return null;
+            }
+        }
+
+        //private async Task<ServiceClient> GetServiceClientAsync(string organizationUrl)
+        //{
+        //    try
+        //    {
+        //        var connectionString = $"AuthType=OAuth;ServiceUri={organizationUrl};AccessToken={userToken};";
+        //        var serviceClient = new ServiceClient(connectionString);
+        //        return serviceClient;
+        //    }
+        //    catch
+        //    {
+        //        try
+        //        {
+        //            var result = await SignInUserAsync();
+        //            userToken = result.AccessToken;
+        //            var connectionString = $"AuthType=OAuth;ServiceUri={organizationUrl};AccessToken={userToken};";
+        //            var serviceClient = new ServiceClient(connectionString);
+        //            return serviceClient;
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Debug.WriteLine($"Error acquiring token: {ex.Message}");
+
+        //            //This is ok for now, but eventually we need to store this failure and then hide the option to increment version on server
+        //            return null;
+        //        }
+        //    }
+        //}
+
+        private async Task<AuthenticationResult> SignInUserAsync()
+        {
+            AuthenticationResult result = null;
+            //var accounts = await _msalClient.GetAccountsAsync();
+
+            try
+            {
+                result = await _msalClient.AcquireTokenForClient(_scopes)
+                    .ExecuteAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error acquiring token: {ex.Message}");
+                return null;
+            }
+
+            //try
+            //{
+            //    result = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
+            //        .ExecuteAsync();
+            //}
+            //catch (MsalUiRequiredException)
+            //{
+            //    try
+            //    {
+            //        result = await _msalClient.AcquireTokenInteractive(_scopes)
+            //            .WithAccount(accounts.FirstOrDefault())
+            //            .WithPrompt(Prompt.SelectAccount)
+            //            .WithSystemWebViewOptions(new SystemWebViewOptions())
+            //            .ExecuteAsync();
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        Debug.WriteLine($"Error acquiring token: {ex.Message}");
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Debug.WriteLine($"Error acquiring token silently: {ex.Message}");
+            //}
+
+            return result;
+        }
+
         private void CopyDirectory(string sourceDir, string targetDir)
         {
             Directory.CreateDirectory(targetDir);
@@ -1369,6 +1677,334 @@ namespace SolutionManager
                 string targetDirectoryPath = Path.Combine(targetDir, Path.GetFileName(directory));
                 CopyDirectory(directory, targetDirectoryPath);
             }
+        }
+
+        private string GetSettingsFilePath(string solutionZipPath)
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDirectory);
+
+            try
+            {
+                using (ZipArchive archive = ZipFile.OpenRead(solutionZipPath))
+                {
+                    var solutionEntry = archive.GetEntry("solution.xml");
+                    if (solutionEntry != null)
+                    {
+                        string solutionXmlPath = Path.Combine(tempDirectory, "solution.xml");
+                        solutionEntry.ExtractToFile(solutionXmlPath);
+
+                        var doc = XDocument.Load(solutionXmlPath);
+                        var solutionName = doc.Descendants("UniqueName").FirstOrDefault()?.Value;
+
+                        if (!string.IsNullOrEmpty(solutionName))
+                        {
+                            string binDirectory = AppContext.BaseDirectory;
+                            return Path.Combine(binDirectory, $"{solutionName}.settings.json");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+
+            throw new InvalidOperationException("Solution name not found in solution.xml or solution.xml not found in the provided zip file.");
+        }
+
+        private void CheckStoredSettings(string path)
+        {
+            try
+            {
+                string settingsFilePath = GetSettingsFilePath(path);
+
+                if (File.Exists(settingsFilePath))
+                {
+                    string jsonContent = File.ReadAllText(settingsFilePath);
+                    using JsonDocument document = JsonDocument.Parse(jsonContent);
+                    JsonElement root = document.RootElement;
+
+                    matchingSettings.Clear();
+
+                    if (root.TryGetProperty("Environments", out JsonElement environments))
+                    {
+                        foreach (JsonElement env in environments.EnumerateArray())
+                        {
+                            foreach (JsonProperty envProperty in env.EnumerateObject())
+                            {
+                                matchingSettings.Add(envProperty.Name);
+                            }
+                        }
+                    }
+
+                    string message = $"Settings file {settingsFilePath} found.";
+                    settingsLogTextBlock.Text += message + Environment.NewLine;
+                    settingsResults.Visibility = Visibility.Visible;
+                    matchingConfigs.Visibility = Visibility.Visible;
+                    matchingConfigsListBox.Visibility = Visibility.Visible;
+                    storedSettingsSetup.Visibility = Visibility.Visible;
+                    singleSettingsFilePicker.Visibility = Visibility.Collapsed;
+                    matchingConfigsNoneBox.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    string message = $"Settings file {settingsFilePath} not found.";
+                    settingsLogTextBlock.Text += message + Environment.NewLine;
+                    matchingConfigs.Visibility = Visibility.Visible;
+                    matchingConfigsListBox.Visibility = Visibility.Collapsed;
+                    matchingConfigsNoneBox.Visibility = Visibility.Visible;
+                    storedSettingsSetup.Visibility = Visibility.Collapsed;
+                    singleSettingsFilePicker.Visibility = Visibility.Visible;
+                    settingsResults.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                string message = $"Error: {ex.Message}";
+                settingsLogTextBlock.Text += message + Environment.NewLine;
+                matchingConfigsListBox.Visibility = Visibility.Collapsed;
+                matchingConfigsNoneBox.Visibility = Visibility.Visible;
+                storedSettingsSetup.Visibility = Visibility.Collapsed;
+                singleSettingsFilePicker.Visibility = Visibility.Visible;
+                settingsResults.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void ValidateEnvironmentSettings(string environmentName, JsonElement newSettings, JsonElement storedSettings)
+        {
+            bool hasIssues = false;
+            var issues = new List<string>();
+
+            if (newSettings.TryGetProperty("EnvironmentVariables", out JsonElement newEnvVars) &&
+                storedSettings.TryGetProperty("EnvironmentVariables", out JsonElement storedEnvVars))
+            {
+                var storedEnvVarsList = storedEnvVars.EnumerateArray().ToList();
+                foreach (JsonElement newEnvVar in newEnvVars.EnumerateArray())
+                {
+                    string schemaName = newEnvVar.GetProperty("SchemaName").GetString();
+                    string? newValue = GetJsonElementValueAsString(newEnvVar, "Value");
+
+                    // Check if the schemaName exists in storedSettings
+                    var storedEnvVar = storedEnvVarsList.FirstOrDefault(ev => ev.GetProperty("SchemaName").GetString() == schemaName);
+
+                    if (storedEnvVar.ValueKind != JsonValueKind.Undefined)
+                    {
+                        if(!string.IsNullOrEmpty(GetJsonElementValueAsString(storedEnvVar, "Value")))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            hasIssues = true;
+                            issues.Add($"Existing Environment Variable '{schemaName}' has an empty or null value.");
+                            continue;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(newValue))
+                    {
+                        hasIssues = true;
+                        issues.Add($"New Environment Variable '{schemaName}' has an empty or null value. Select the stored config at the left to update the value.");
+                    }
+                    
+
+                    storedEnvVarsList.Add(newEnvVar);
+                }
+
+                // Find the correct environment object within the Environments array and update it
+                string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+                string jsonContent = File.ReadAllText(settingsFilePath);
+                using JsonDocument document = JsonDocument.Parse(jsonContent);
+                JsonElement root = document.RootElement;
+
+                if (root.TryGetProperty("Environments", out JsonElement environments))
+                {
+                    var environmentsList = environments.EnumerateArray().ToList();
+                    for (int i = 0; i < environmentsList.Count; i++)
+                    {
+                        var env = environmentsList[i];
+                        if (env.TryGetProperty(environmentName, out JsonElement envObject))
+                        {
+                            var updatedEnvObject = new Dictionary<string, JsonElement>
+                            {
+                                { "EnvironmentVariables", JsonDocument.Parse(JsonSerializer.Serialize(storedEnvVarsList)).RootElement }
+                            };
+
+                            var updatedEnv = new Dictionary<string, JsonElement>
+                            {
+                                { environmentName, JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvObject)).RootElement }
+                            };
+
+                            environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
+                            break;
+                        }
+                    }
+
+                    var updatedJson = new
+                    {
+                        Environments = environmentsList
+                    };
+
+                    string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(settingsFilePath, updatedJsonContent);
+                }
+            }
+
+            // Handle ConnectionReferences
+            if (newSettings.TryGetProperty("ConnectionReferences", out JsonElement newConnRefs) &&
+                storedSettings.TryGetProperty("ConnectionReferences", out JsonElement storedConnRefs))
+            {
+                var storedConnRefsList = storedConnRefs.EnumerateArray().ToList();
+                foreach (JsonElement newConnRef in newConnRefs.EnumerateArray())
+                {
+                    string logicalName = newConnRef.GetProperty("LogicalName").GetString();
+                    string? newConnectionId = GetJsonElementValueAsString(newConnRef, "ConnectionId");
+                    string? newConnectorId = GetJsonElementValueAsString(newConnRef, "ConnectorId");
+
+                    // Check if the logicalName exists in storedSettings
+                    var storedConnRef = storedConnRefsList.FirstOrDefault(cr => cr.GetProperty("LogicalName").GetString() == logicalName);
+
+                    if (storedConnRef.ValueKind != JsonValueKind.Undefined)
+                    {
+                        if (!string.IsNullOrEmpty(GetJsonElementValueAsString(storedConnRef, "ConnectionId")) &&
+                            !string.IsNullOrEmpty(GetJsonElementValueAsString(storedConnRef, "ConnectorId")))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            hasIssues = true;
+                            issues.Add($"Existing Connection Reference '{logicalName}' has an empty or null ConnectionId or ConnectorId.");
+                            continue;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(newConnectionId) || string.IsNullOrEmpty(newConnectorId))
+                    {
+                        hasIssues = true;
+                        issues.Add($"New Connection Reference '{logicalName}' has an empty or null ConnectionId or ConnectorId. Select the stored config at the left to update the value.");
+                    }
+
+                    storedConnRefsList.Add(newConnRef);
+                }
+
+                // Find the correct environment object within the Environments array and update it
+                string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+                string jsonContent = File.ReadAllText(settingsFilePath);
+                using JsonDocument document = JsonDocument.Parse(jsonContent);
+                JsonElement root = document.RootElement;
+
+                if (root.TryGetProperty("Environments", out JsonElement environments))
+                {
+                    var environmentsList = environments.EnumerateArray().ToList();
+                    for (int i = 0; i < environmentsList.Count; i++)
+                    {
+                        var env = environmentsList[i];
+                        if (env.TryGetProperty(environmentName, out JsonElement envObject))
+                        {
+                            var updatedEnvObject = new Dictionary<string, JsonElement>
+                    {
+                        { "ConnectionReferences", JsonDocument.Parse(JsonSerializer.Serialize(storedConnRefsList)).RootElement }
+                    };
+
+                            var updatedEnv = new Dictionary<string, JsonElement>
+                    {
+                        { environmentName, JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvObject)).RootElement }
+                    };
+
+                            environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
+                            break;
+                        }
+                    }
+
+                    var updatedJson = new
+                    {
+                        Environments = environmentsList
+                    };
+
+                    string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(settingsFilePath, updatedJsonContent);
+                }
+            }
+
+            if (hasIssues)
+            {
+                settingsLogTextBlock.Text += $"Issues found in environment '{environmentName}':" + Environment.NewLine;
+                foreach (var issue in issues)
+                {
+                    settingsLogTextBlock.Text += "⚠️ " + issue + Environment.NewLine;
+                }
+
+                // Remove and re-add the item in the ListBox
+                if (matchingSettings.Contains(environmentName))
+                {
+                    matchingSettings.Remove(environmentName);
+                    matchingSettings.Add($"⚠️ {environmentName}");
+                }
+            }
+            else
+            {
+                // Check if the environmentName has been flagged with the warning icon
+                string flaggedEnvironmentName = $"⚠️ {environmentName}";
+                if (matchingSettings.Contains(flaggedEnvironmentName))
+                {
+                    matchingSettings.Remove(flaggedEnvironmentName);
+                    matchingSettings.Add(environmentName);
+                }
+            }
+        }
+
+        private string? GetJsonElementValueAsString(JsonElement element, string propertyName)
+        {
+            try
+            {
+                if (element.ValueKind != JsonValueKind.Undefined && element.TryGetProperty(propertyName, out JsonElement propertyElement))
+                {
+                    if (propertyElement.ValueKind == JsonValueKind.Undefined)
+                    {
+                        Debug.WriteLine($"Property '{propertyName}' is undefined.");
+                        return null;
+                    }
+
+                    return propertyElement.ValueKind switch
+                    {
+                        JsonValueKind.String => propertyElement.GetString(),
+                        JsonValueKind.Number => propertyElement.GetRawText(),
+                        JsonValueKind.True => "true",
+                        JsonValueKind.False => "false",
+                        _ => null
+                    };
+                }
+                else
+                {
+                    Debug.WriteLine($"Property '{propertyName}' not found or element is undefined.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error accessing property '{propertyName}': {ex.Message}");
+            }
+            return null;
+        }
+
+        private bool IsValidJson(string jsonString)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(jsonString);
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private void ShowErrorDialog(string message)
+        {
+            errorDialogText.Text = message;
+            errorDialog.ShowAsync();
         }
         #endregion
     }

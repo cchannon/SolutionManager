@@ -174,7 +174,7 @@ namespace SolutionManager
             var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 
             // Regular expression to match the columns
-            var regex = new Regex(@"\[(\d+)\]\s+(\*?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(https?://\S+)");
+            var regex = new Regex(@"\[(\d+)\]\s+(\*?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S*)\s*(.+?)?\s*(https?://\S+)?");
 
             foreach (var line in lines.Skip(1)) // Skip the header lines
             {
@@ -190,8 +190,8 @@ namespace SolutionManager
                         User = match.Groups[5].Value,
                         Cloud = match.Groups[6].Value,
                         Type = match.Groups[7].Value,
-                        Environment = match.Groups[8].Value,
-                        EnvironmentUrl = match.Groups[9].Value
+                        Environment = match.Groups[8].Success ? match.Groups[8].Value : string.Empty,
+                        EnvironmentUrl = match.Groups[9].Success ? match.Groups[9].Value : string.Empty
                     };
                     authProfiles.Add(authProfile);
                 }

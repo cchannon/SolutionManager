@@ -141,18 +141,48 @@ namespace SolutionManager
             var result = await manualEnvironmentDialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var environmentProfile = new EnvironmentProfile
+                string environmentUrl = manualEnvironmentUrlTextBox.Text;
+                if (!string.IsNullOrEmpty(environmentUrl))
                 {
-                    DisplayName = manualEnvironmentNameTextBox.Text,
-                    EnvironmentId = manualEnvironmentIdTextBox.Text,
-                    EnvironmentUrl = manualEnvironmentUrlTextBox.Text,
-                    UniqueName = manualEnvironmentNameTextBox.Text,
-                    Active = true
-                };
+                    var job = new RunningJob
+                    {
+                        Name = $"Retrieve Environment Info: {environmentUrl}",
+                        Status = "Waiting",
+                        Timestamp = DateTime.Now,
+                        JobLogic = async (currentJob) =>
+                        {
+                            string command = $"pac env who -env {environmentUrl}";
+                            string? output = await RunPowerShellScriptAsync(command);
+                            if (!string.IsNullOrEmpty(output))
+                            {
+                                var environmentProfile = ParseEnvironmentInfo(output);
+                                if (environmentProfile != null)
+                                {
+                                    environmentProfiles.Add(environmentProfile);
+                                    DispatcherQueue.TryEnqueue(() =>
+                                    {
+                                        environmentList.ItemsSource = null;
+                                        environmentList.ItemsSource = environmentProfiles;
+                                    });
+                                    currentJob.Status = "Successful";
+                                    currentJob.Output = "Environment information retrieved successfully.";
+                                }
+                                else
+                                {
+                                    currentJob.Status = "Failed";
+                                    currentJob.Output = "Failed to parse environment information.";
+                                }
+                            }
+                            else
+                            {
+                                currentJob.Status = "Failed";
+                                currentJob.Output = "Failed to retrieve environment information.";
+                            }
+                        }
+                    };
 
-                environmentProfiles.Add(environmentProfile);
-                environmentList.ItemsSource = null;
-                environmentList.ItemsSource = environmentProfiles;
+                    StartJob(job);
+                }
             }
         }
 
@@ -326,6 +356,55 @@ namespace SolutionManager
             }
 
             return environmentProfiles;
+        }
+
+        private EnvironmentProfile? ParseEnvironmentInfo(string output)
+        {
+            try
+            {
+                var lines = output.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries);
+                var environmentProfile = new EnvironmentProfile()
+                {
+                    DisplayName = string.Empty,
+                    EnvironmentId = string.Empty,
+                    EnvironmentUrl = string.Empty,
+                    UniqueName = string.Empty
+                };
+
+                foreach (var line in lines)
+                {
+                    if (line.StartsWith("Org ID:"))
+                    {
+                        environmentProfile.EnvironmentId = line.Split(':')[1].Trim();
+                    }
+                    else if (line.StartsWith("Unique Name:"))
+                    {
+                        environmentProfile.UniqueName = line.Split(':')[1].Trim();
+                    }
+                    else if (line.StartsWith("Friendly Name:"))
+                    {
+                        environmentProfile.DisplayName = line.Split(':')[1].Trim();
+                    }
+                    else if (line.StartsWith("Org URL:"))
+                    {
+                        environmentProfile.EnvironmentUrl = line.Split(':')[1].Trim();
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(environmentProfile.EnvironmentId) &&
+                    !string.IsNullOrEmpty(environmentProfile.UniqueName) &&
+                    !string.IsNullOrEmpty(environmentProfile.DisplayName) &&
+                    !string.IsNullOrEmpty(environmentProfile.EnvironmentUrl))
+                {
+                    return environmentProfile;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error parsing environment info: {ex.Message}");
+            }
+
+            return null;
         }
 
         private List<SolutionProfile> ParseSolutionProfiles(string output)

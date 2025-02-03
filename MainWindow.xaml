@@ -481,8 +481,6 @@
             <!-- Manual Enviroment Info Entry -->
             <ContentDialog x:Name="manualEnvironmentDialog" Title="Add Environment" PrimaryButtonText="Add" CloseButtonText="Cancel">
                 <StackPanel>
-                    <TextBox x:Name="manualEnvironmentNameTextBox" Header="Environment Name" PlaceholderText="Enter environment name (unique)" />
-                    <TextBox x:Name="manualEnvironmentIdTextBox" Header="Environment ID" PlaceholderText="Enter environment ID" />
                     <TextBox x:Name="manualEnvironmentUrlTextBox" Header="Environment URL" PlaceholderText="Enter environment URL" />
                 </StackPanel>
             </ContentDialog>

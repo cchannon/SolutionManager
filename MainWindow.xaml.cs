@@ -29,7 +29,7 @@ namespace SolutionManager
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
         private static string _tenantId = ""; // Replace with your tenant ID
-        private static string[] _scopes = [""]; // Define the scopes you need
+        private static string[] _scopes = ["https://graph.microsoft.com/.default"]; // Define the scopes you need
 
         List<AuthProfile> authProfiles = new();
         List<EnvironmentProfile> environmentProfiles = new();
@@ -68,7 +68,6 @@ namespace SolutionManager
         public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
             InitializeMsalClient();
-            authWebView.Visibility = Visibility.Visible;
             var authResult = await SignInUserAsync();
             if (authResult != null)
             {
@@ -76,7 +75,6 @@ namespace SolutionManager
                 await InitializeAuthProfilesAsync();
                 //_ = InitializeAuthProfilesWithDiscoAsync();
             }
-            authWebView.Visibility = Visibility.Collapsed;
 
             var storyboard = new Storyboard();
 
@@ -1723,34 +1721,40 @@ namespace SolutionManager
         private async Task<AuthenticationResult> SignInUserAsync()
         {
             AuthenticationResult result = null;
-            var accounts = await _msalClient.GetAccountsAsync();
 
             try
             {
-                result = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
-                    .ExecuteAsync();
-            }
-            catch (MsalUiRequiredException)
-            {
-                try
-                {
-                    result = await _msalClient.AcquireTokenForClient(_scopes)
+                result = await _msalClient.AcquireTokenForClient(_scopes)
                         .ExecuteAsync();
-
-                    //result = await _msalClient.AcquireTokenInteractive(_scopes)
-                    //    .WithAccount(accounts.FirstOrDefault())
-                    //    .WithPrompt(Prompt.SelectAccount)
-                    //    .ExecuteAsync();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error acquiring token: {ex.Message}");
-                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error acquiring token silently: {ex.Message}");
+                Debug.WriteLine($"Error acquiring token: {ex.Message}");
             }
+            //try
+            //{
+            //    var accounts = await _msalClient.GetAccountsAsync();
+            //    result = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
+            //        .ExecuteAsync();
+            //}
+            //catch (MsalUiRequiredException)
+            //{
+            //    try
+            //    {
+            //result = await _msalClient.AcquireTokenInteractive(_scopes)
+            //    .WithAccount(accounts.FirstOrDefault())
+            //    .WithPrompt(Prompt.SelectAccount)
+            //    .ExecuteAsync();
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        Debug.WriteLine($"Error acquiring token: {ex.Message}");
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Debug.WriteLine($"Error acquiring token silently: {ex.Message}");
+            //}
 
             return result;
         }

@@ -123,11 +123,11 @@ namespace SolutionManager
         {
             progressRingOverlay.Visibility = Visibility.Visible;
             string? output = await RunPowerShellScriptAsync("pac env list");
-            if (!string.IsNullOrEmpty(output))
+            if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") == -1)
             {
                 environmentProfiles = ParseEnvironmentProfiles(output);
             }
-            else
+            else if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") != -1)
             {
                 noEnvironmentsFound = true;
                 addEnvironmentButton.Visibility = Visibility.Visible;
@@ -1662,7 +1662,7 @@ namespace SolutionManager
         {
             _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
                 .WithClientSecret(_clientSecret)
-                .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+                .WithAuthority(new Uri($"https://login.microsoftonline.us/{_tenantId}"))
                 .Build();
 
             //_msalClient = PublicClientApplicationBuilder.Create(_clientId)

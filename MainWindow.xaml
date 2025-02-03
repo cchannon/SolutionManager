@@ -451,8 +451,6 @@
             <Grid x:Name="progressRingOverlay" Background="Black" Opacity="0.5" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <ProgressRing IsActive="True" Width="100" Height="100" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
-            <!-- WebView control for authentication -->
-            <WebView2 x:Name="authWebView" Visibility="Visible" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
             <!-- Job Details Modal -->
             <ContentDialog x:Name="jobDetailsDialog" Title="Job Details" PrimaryButtonText="Close" IsPrimaryButtonEnabled="True">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

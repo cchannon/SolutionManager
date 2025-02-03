@@ -25,7 +25,7 @@ namespace SolutionManager
 {
     public sealed partial class MainWindow : Window
     {
-        private static IPublicClientApplication _msalClient;
+        private static IConfidentialClientApplication _msalClient;
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
         private static string _tenantId = ""; // Replace with your tenant ID
@@ -68,12 +68,12 @@ namespace SolutionManager
         public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
             InitializeMsalClient();
-            _ = InitializeAuthProfilesAsync();
             authWebView.Visibility = Visibility.Visible;
             var authResult = await SignInUserAsync();
             if (authResult != null)
             {
                 userToken = authResult.AccessToken;
+                await InitializeAuthProfilesAsync();
                 //_ = InitializeAuthProfilesWithDiscoAsync();
             }
             authWebView.Visibility = Visibility.Collapsed;
@@ -132,6 +132,7 @@ namespace SolutionManager
             else
             {
                 noEnvironmentsFound = true;
+                addEnvironmentButton.Visibility = Visibility.Visible;
                 await ShowManualEnvironmentEntryDialog();
             }
             progressRingOverlay.Visibility = Visibility.Collapsed;
@@ -511,6 +512,11 @@ namespace SolutionManager
                     }
                 }
             }
+        }
+
+        private async void AddEnvironmentButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowManualEnvironmentEntryDialog();
         }
 
         private async void BrowseFileButton_Click(object sender, RoutedEventArgs e)
@@ -1656,15 +1662,15 @@ namespace SolutionManager
 
         private void InitializeMsalClient()
         {
-            //_msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
-            //    .WithClientSecret(_clientSecret)
-            //    .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
-            //    .Build();
-
-            _msalClient = PublicClientApplicationBuilder.Create(_clientId)
+            _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
+                .WithClientSecret(_clientSecret)
                 .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
-                .WithDefaultRedirectUri()
                 .Build();
+
+            //_msalClient = PublicClientApplicationBuilder.Create(_clientId)
+            //    .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+            //    .WithDefaultRedirectUri()
+            //    .Build();
         }
 
         private ServiceClient GetServiceClient(string organizationUrl)
@@ -1728,10 +1734,13 @@ namespace SolutionManager
             {
                 try
                 {
-                    result = await _msalClient.AcquireTokenInteractive(_scopes)
-                        .WithAccount(accounts.FirstOrDefault())
-                        .WithPrompt(Prompt.SelectAccount)
+                    result = await _msalClient.AcquireTokenForClient(_scopes)
                         .ExecuteAsync();
+
+                    //result = await _msalClient.AcquireTokenInteractive(_scopes)
+                    //    .WithAccount(accounts.FirstOrDefault())
+                    //    .WithPrompt(Prompt.SelectAccount)
+                    //    .ExecuteAsync();
                 }
                 catch (Exception ex)
                 {

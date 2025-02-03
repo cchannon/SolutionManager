@@ -16,14 +16,16 @@ using System.Xml.Linq;
 using Windows.Storage;
 using Microsoft.Identity.Client;
 using Microsoft.PowerPlatform.Dataverse.Client;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Net.Http;
 
 namespace SolutionManager
 {
     public sealed partial class MainWindow : Window
     {
-        private static IConfidentialClientApplication _msalClient;
+        private static IPublicClientApplication _msalClient;
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
         private static string _tenantId = ""; // Replace with your tenant ID
@@ -37,6 +39,7 @@ namespace SolutionManager
         private Queue<RunningJob> jobQueue = new();
         object settingsObject;
         string userToken = null;
+        bool noEnvironmentsFound = false;
 
         public MainWindow()
         {
@@ -44,6 +47,8 @@ namespace SolutionManager
             jobsListBox.ItemsSource = jobs;
             matchingConfigsListBox.ItemsSource = matchingSettings;
             matchingUploadConfigsListBox.ItemsSource = matchingSettings;
+            environmentList.ItemsSource = environmentProfiles;
+            importEnvironmentList.ItemsSource = environmentProfiles;
 
             // Set default file paths for config CSV files
             string binDirectory = AppContext.BaseDirectory;
@@ -62,13 +67,14 @@ namespace SolutionManager
 
         public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
-            _ = InitializeAuthProfilesAsync();
             InitializeMsalClient();
+            _ = InitializeAuthProfilesAsync();
             authWebView.Visibility = Visibility.Visible;
             var authResult = await SignInUserAsync();
             if (authResult != null)
             {
                 userToken = authResult.AccessToken;
+                //_ = InitializeAuthProfilesWithDiscoAsync();
             }
             authWebView.Visibility = Visibility.Collapsed;
 
@@ -96,6 +102,7 @@ namespace SolutionManager
         private async Task InitializeAuthProfilesAsync()
         {
             progressRingOverlay.Visibility = Visibility.Visible;
+
             string? output = await RunPowerShellScriptAsync("pac auth list");
             if (!string.IsNullOrEmpty(output))
             {
@@ -121,11 +128,95 @@ namespace SolutionManager
             if (!string.IsNullOrEmpty(output))
             {
                 environmentProfiles = ParseEnvironmentProfiles(output);
-
-                environmentList.ItemsSource = environmentProfiles;
-                importEnvironmentList.ItemsSource = environmentProfiles;
+            }
+            else
+            {
+                noEnvironmentsFound = true;
+                await ShowManualEnvironmentEntryDialog();
             }
             progressRingOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private async Task ShowManualEnvironmentEntryDialog()
+        {
+            var result = await manualEnvironmentDialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                var environmentProfile = new EnvironmentProfile
+                {
+                    DisplayName = manualEnvironmentNameTextBox.Text,
+                    EnvironmentId = manualEnvironmentIdTextBox.Text,
+                    EnvironmentUrl = manualEnvironmentUrlTextBox.Text,
+                    UniqueName = manualEnvironmentNameTextBox.Text,
+                    Active = true
+                };
+
+                environmentProfiles.Add(environmentProfile);
+                environmentList.ItemsSource = null;
+                environmentList.ItemsSource = environmentProfiles;
+            }
+        }
+
+        private async Task InitializeAuthProfilesWithDiscoAsync()
+        {
+            progressRingOverlay.Visibility = Visibility.Visible;
+
+            try
+            {
+                var environments = await GetEnvironmentsWithDiscoAsync();
+                if (environments != null)
+                {
+                    environmentProfiles = environments;
+
+                    var activeProfile = environmentProfiles.FirstOrDefault();
+                    if (activeProfile != null)
+                    {
+                        authProfileText.Text = $"Auth Profile: {activeProfile.DisplayName}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error: {ex.Message}");
+            }
+            finally
+            {
+                progressRingOverlay.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async Task<List<EnvironmentProfile>> GetEnvironmentsWithDiscoAsync()
+        {
+            var environments = new List<EnvironmentProfile>();
+
+            try
+            {
+                var httpClient = new HttpClient();
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(scheme: "Bearer", userToken);
+
+                var response = await httpClient.GetFromJsonAsync<GlobalDiscoveryResponse>("https://globaldisco.crm.dynamics.com/api/discovery/v2.0/Instances");
+
+                if (response != null && response.value != null)
+                {
+                    foreach (var instance in response.value)
+                    {
+                        //environments.Add(new EnvironmentProfile
+                        //{
+                        //    DisplayName = instance.FriendlyName,
+                        //    EnvironmentId = instance.EnvironmentId,
+                        //    EnvironmentUrl = instance.ApiUrl,
+                        //    UniqueName = instance.UniqueName,
+                        //    Active = instance.State == "Ready"
+                        //});
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error retrieving environments: {ex.Message}");
+            }
+
+            return environments;
         }
 
         private async Task<string?> RunPowerShellScriptAsync(string scriptText, string workingDirectory = "")
@@ -1565,9 +1656,14 @@ namespace SolutionManager
 
         private void InitializeMsalClient()
         {
-            _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
-                .WithClientSecret(_clientSecret)
+            //_msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
+            //    .WithClientSecret(_clientSecret)
+            //    .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+            //    .Build();
+
+            _msalClient = PublicClientApplicationBuilder.Create(_clientId)
                 .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+                .WithDefaultRedirectUri()
                 .Build();
         }
 
@@ -1621,43 +1717,31 @@ namespace SolutionManager
         private async Task<AuthenticationResult> SignInUserAsync()
         {
             AuthenticationResult result = null;
-            //var accounts = await _msalClient.GetAccountsAsync();
+            var accounts = await _msalClient.GetAccountsAsync();
 
             try
             {
-                result = await _msalClient.AcquireTokenForClient(_scopes)
+                result = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
                     .ExecuteAsync();
+            }
+            catch (MsalUiRequiredException)
+            {
+                try
+                {
+                    result = await _msalClient.AcquireTokenInteractive(_scopes)
+                        .WithAccount(accounts.FirstOrDefault())
+                        .WithPrompt(Prompt.SelectAccount)
+                        .ExecuteAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error acquiring token: {ex.Message}");
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error acquiring token: {ex.Message}");
-                return null;
+                Debug.WriteLine($"Error acquiring token silently: {ex.Message}");
             }
-
-            //try
-            //{
-            //    result = await _msalClient.AcquireTokenSilent(_scopes, accounts.FirstOrDefault())
-            //        .ExecuteAsync();
-            //}
-            //catch (MsalUiRequiredException)
-            //{
-            //    try
-            //    {
-            //        result = await _msalClient.AcquireTokenInteractive(_scopes)
-            //            .WithAccount(accounts.FirstOrDefault())
-            //            .WithPrompt(Prompt.SelectAccount)
-            //            .WithSystemWebViewOptions(new SystemWebViewOptions())
-            //            .ExecuteAsync();
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Debug.WriteLine($"Error acquiring token: {ex.Message}");
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    Debug.WriteLine($"Error acquiring token silently: {ex.Message}");
-            //}
 
             return result;
         }
@@ -2075,6 +2159,20 @@ namespace SolutionManager
         public required string ConnectionId { get; set; }
         public required string ConnectorId { get; set; }
         public required string TargetEnvironment { get; set; }
+    }
+
+    public class GlobalDiscoveryResponse
+    {
+        public List<Instance> value { get; set; }
+    }
+
+    public class Instance
+    {
+        public string FriendlyName { get; set; }
+        public string EnvironmentId { get; set; }
+        public string ApiUrl { get; set; }
+        public string UniqueName { get; set; }
+        public string State { get; set; }
     }
     #endregion
 }

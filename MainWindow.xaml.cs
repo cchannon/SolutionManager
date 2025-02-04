@@ -20,6 +20,9 @@ using Microsoft.Xrm.Sdk.Query;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Http;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace SolutionManager
 {
@@ -1678,7 +1681,7 @@ namespace SolutionManager
             if (folder != null)
             {
                 string filePath = Path.Combine(folder.Path, "JobLog.csv");
-                await ExportJobLogToCsv(filePath);
+                await ExportJobLogToDocx(filePath);
             }
         }
 
@@ -2406,20 +2409,35 @@ namespace SolutionManager
             }
         }
 
-        private async Task ExportJobLogToCsv(string filePath)
+        private async Task ExportJobLogToDocx(string filePath)
         {
             try
             {
-                using (var writer = new StreamWriter(filePath))
+                using (WordprocessingDocument wordDocument = WordprocessingDocument.Create(filePath, WordprocessingDocumentType.Document))
                 {
-                    // Write the header
-                    await writer.WriteLineAsync("Id,Name,Status,Environment,Output,Error,Timestamp,PredecessorId");
+                    MainDocumentPart mainPart = wordDocument.AddMainDocumentPart();
+                    mainPart.Document = new Document();
+                    Body body = mainPart.Document.AppendChild(new Body());
 
-                    // Write the job log entries
                     foreach (var job in jobs)
                     {
-                        string line = $"{job.Id},{job.Name},{job.Status},{job.Environment},{job.Output},{job.Error},{job.Timestamp},{job.PredecessorId}";
-                        await writer.WriteLineAsync(line);
+                        AddParagraph(body, "Job ID: ", true);
+                        AddParagraph(body, job.Id, false);
+                        AddParagraph(body, "Name: ", true);
+                        AddParagraph(body, job.Name, false);
+                        AddParagraph(body, "Status: ", true);
+                        AddParagraph(body, job.Status, false);
+                        AddParagraph(body, "Environment: ", true);
+                        AddParagraph(body, job.Environment ?? "null", false);
+                        AddParagraph(body, "Timestamp: ", true);
+                        AddParagraph(body, job.Timestamp.ToShortTimeString(), false);
+                        AddParagraph(body, "Predecessor ID: ", true);
+                        AddParagraph(body, job.PredecessorId ?? "null", false);
+                        AddParagraph(body, "Output: ", true);
+                        AddParagraph(body, job.Output ?? "null", false);
+                        AddParagraph(body, "Error: ", true);
+                        AddParagraph(body, job.Error ?? "null", false);
+                        AddParagraph(body, new string('-', 30), false);
                     }
                 }
 
@@ -2429,6 +2447,23 @@ namespace SolutionManager
             {
                 ShowErrorDialog($"Error exporting job log: {ex.Message}");
             }
+        }
+
+        private void AddParagraph(Body body, string text, bool isBold)
+        {
+            Paragraph paragraph = new Paragraph();
+            Run run = new Run();
+            RunProperties runProperties = new RunProperties();
+
+            if (isBold)
+            {
+                runProperties.Append(new Bold());
+            }
+
+            run.Append(runProperties);
+            run.Append(new Text(text));
+            paragraph.Append(run);
+            body.Append(paragraph);
         }
         #endregion
     }

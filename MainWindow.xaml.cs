@@ -29,7 +29,7 @@ namespace SolutionManager
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
         private static string _tenantId = ""; // Replace with your tenant ID
-        private static string[] _scopes = ["https://graph.microsoft.com/.default"]; // Define the scopes you need
+        private static string[] _scopes = ["https://graph.microsoft.com/.default"];
 
         List<AuthProfile> authProfiles = new();
         List<EnvironmentProfile> environmentProfiles = new();
@@ -131,7 +131,10 @@ namespace SolutionManager
             {
                 noEnvironmentsFound = true;
                 addEnvironmentButton.Visibility = Visibility.Visible;
-                await ShowManualEnvironmentEntryDialog();
+                if (!CsvFileHasRows())
+                {
+                    await ShowManualEnvironmentEntryDialog();
+                }
             }
             progressRingOverlay.Visibility = Visibility.Collapsed;
         }
@@ -144,44 +147,60 @@ namespace SolutionManager
                 string environmentUrl = manualEnvironmentUrlTextBox.Text;
                 if (!string.IsNullOrEmpty(environmentUrl))
                 {
-                    var job = new RunningJob
+                    if (EnvironmentExistsInCsv(environmentUrl))
                     {
-                        Name = $"Retrieve Environment Info: {environmentUrl}",
-                        Status = "Waiting",
-                        Timestamp = DateTime.Now,
-                        JobLogic = async (currentJob) =>
+                        var job = new RunningJob
                         {
-                            string command = $"pac env who -env {environmentUrl}";
-                            string? output = await RunPowerShellScriptAsync(command);
-                            if (!string.IsNullOrEmpty(output))
+                            Name = $"Retrieve Environment Info: {environmentUrl}",
+                            Status = "Successful",
+                            Timestamp = DateTime.Now,
+                            Output = "Environment information already exists in CSV. Skipping 'pac env who' command."
+                        };
+
+                        StartJob(job);
+                    }
+                    else
+                    {
+                        var job = new RunningJob
+                        {
+                            Name = $"Retrieve Environment Info: {environmentUrl}",
+                            Status = "Waiting",
+                            Timestamp = DateTime.Now,
+                            JobLogic = async (currentJob) =>
                             {
-                                var environmentProfile = ParseEnvironmentInfo(output);
-                                if (environmentProfile != null)
+                                string command = $"pac env who -env {environmentUrl}";
+                                string? output = await RunPowerShellScriptAsync(command);
+                                if (!string.IsNullOrEmpty(output))
                                 {
-                                    environmentProfiles.Add(environmentProfile);
-                                    DispatcherQueue.TryEnqueue(() =>
+                                    var environmentProfile = ParseEnvironmentInfo(output);
+                                    if (environmentProfile != null)
                                     {
-                                        environmentList.ItemsSource = null;
-                                        environmentList.ItemsSource = environmentProfiles;
-                                    });
-                                    currentJob.Status = "Successful";
-                                    currentJob.Output = "Environment information retrieved successfully.";
+                                        environmentProfiles.Add(environmentProfile);
+                                        DispatcherQueue.TryEnqueue(() =>
+                                        {
+                                            environmentList.ItemsSource = null;
+                                            environmentList.ItemsSource = environmentProfiles;
+                                        });
+                                        SaveEnvironmentToCsv(environmentProfile); // Save to CSV
+                                        currentJob.Status = "Successful";
+                                        currentJob.Output = "Environment information retrieved successfully.";
+                                    }
+                                    else
+                                    {
+                                        currentJob.Status = "Failed";
+                                        currentJob.Output = "Failed to parse environment information.";
+                                    }
                                 }
                                 else
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = "Failed to parse environment information.";
+                                    currentJob.Output = "Failed to retrieve environment information.";
                                 }
                             }
-                            else
-                            {
-                                currentJob.Status = "Failed";
-                                currentJob.Output = "Failed to retrieve environment information.";
-                            }
-                        }
-                    };
+                        };
 
-                    StartJob(job);
+                        StartJob(job);
+                    }
                 }
             }
         }
@@ -1559,6 +1578,23 @@ namespace SolutionManager
             }
         }
 
+        private async void ExportJobLogButton_Click(object sender, RoutedEventArgs e)
+        {
+            var picker = new FolderPicker();
+            picker.SuggestedStartLocation = PickerLocationId.Desktop;
+            picker.FileTypeFilter.Add("*");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder != null)
+            {
+                string filePath = Path.Combine(folder.Path, "JobLog.csv");
+                await ExportJobLogToCsv(filePath);
+            }
+        }
+
         private void PivotRadioButton_Checked(object sender, RoutedEventArgs e)
         {
             if (sender is RadioButton radioButton && radioButton.Content != null)
@@ -2181,6 +2217,96 @@ namespace SolutionManager
         {
             errorDialogText.Text = message;
             errorDialog.ShowAsync();
+        }
+
+        private void SaveEnvironmentToCsv(EnvironmentProfile environmentProfile)
+        {
+            string binDirectory = AppContext.BaseDirectory;
+            string csvFilePath = Path.Combine(binDirectory, "environments.csv");
+
+            bool fileExists = File.Exists(csvFilePath);
+
+            using (var writer = new StreamWriter(csvFilePath, append: true))
+            {
+                if (!fileExists)
+                {
+                    // Write the header if the file does not exist
+                    writer.WriteLine("DisplayName,EnvironmentId,EnvironmentUrl,UniqueName,Active");
+                }
+
+                // Write the environment information
+                writer.WriteLine($"{environmentProfile.DisplayName},{environmentProfile.EnvironmentId},{environmentProfile.EnvironmentUrl},{environmentProfile.UniqueName},{environmentProfile.Active}");
+            }
+        }
+
+        private bool EnvironmentExistsInCsv(string environmentUrl)
+        {
+            string binDirectory = AppContext.BaseDirectory;
+            string csvFilePath = Path.Combine(binDirectory, "environments.csv");
+
+            if (!File.Exists(csvFilePath))
+            {
+                return false;
+            }
+
+            using (var reader = new StreamReader(csvFilePath))
+            {
+                string headerLine = reader.ReadLine(); // Skip the header line
+                while (!reader.EndOfStream)
+                {
+                    var line = reader.ReadLine();
+                    var values = line.Split(',');
+
+                    if (values.Length >= 3 && values[2].Equals(environmentUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool CsvFileHasRows()
+        {
+            string binDirectory = AppContext.BaseDirectory;
+            string csvFilePath = Path.Combine(binDirectory, "environments.csv");
+
+            if (!File.Exists(csvFilePath))
+            {
+                return false;
+            }
+
+            using (var reader = new StreamReader(csvFilePath))
+            {
+                string headerLine = reader.ReadLine(); // Skip the header line
+                return !reader.EndOfStream; // Check if there are any rows after the header
+            }
+        }
+
+        private async Task ExportJobLogToCsv(string filePath)
+        {
+            try
+            {
+                using (var writer = new StreamWriter(filePath))
+                {
+                    // Write the header
+                    await writer.WriteLineAsync("Id,Name,Status,Environment,Output,Error,Timestamp,PredecessorId");
+
+                    // Write the job log entries
+                    foreach (var job in jobs)
+                    {
+                        string line = $"{job.Id},{job.Name},{job.Status},{job.Environment},{job.Output},{job.Error},{job.Timestamp},{job.PredecessorId}";
+                        await writer.WriteLineAsync(line);
+                    }
+                }
+
+                ShowErrorDialog("Job log exported successfully.");
+            }
+            catch (Exception ex)
+            {
+                ShowErrorDialog($"Error exporting job log: {ex.Message}");
+            }
         }
         #endregion
     }

@@ -180,21 +180,23 @@ namespace SolutionManager
                                         {
                                             environmentList.ItemsSource = null;
                                             environmentList.ItemsSource = environmentProfiles;
+                                            importEnvironmentList.ItemsSource = null;
+                                            importEnvironmentList.ItemsSource = environmentProfiles;
                                         });
                                         SaveEnvironmentToCsv(environmentProfile); // Save to CSV
                                         currentJob.Status = "Successful";
-                                        currentJob.Output = "Environment information retrieved successfully.";
+                                        currentJob.Output = output;
                                     }
                                     else
                                     {
                                         currentJob.Status = "Failed";
-                                        currentJob.Output = "Failed to parse environment information.";
+                                        currentJob.Output = output;
                                     }
                                 }
                                 else
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = "Failed to retrieve environment information.";
+                                    currentJob.Output = output;
                                 }
                             }
                         };
@@ -392,21 +394,21 @@ namespace SolutionManager
 
                 foreach (var line in lines)
                 {
-                    if (line.StartsWith("Org ID:"))
+                    if (line.IndexOf("Org ID:") != -1)
                     {
                         environmentProfile.EnvironmentId = line.Split(':')[1].Trim();
                     }
-                    else if (line.StartsWith("Unique Name:"))
+                    else if (line.IndexOf("Unique Name:") != -1)
                     {
                         environmentProfile.UniqueName = line.Split(':')[1].Trim();
                     }
-                    else if (line.StartsWith("Friendly Name:"))
+                    else if (line.IndexOf("Friendly Name:")!= -1)
                     {
                         environmentProfile.DisplayName = line.Split(':')[1].Trim();
                     }
-                    else if (line.StartsWith("Org URL:"))
+                    else if (line.IndexOf("Org URL:") != -1)
                     {
-                        environmentProfile.EnvironmentUrl = line.Split(':')[1].Trim();
+                        environmentProfile.EnvironmentUrl = line.Split(':')[1].Trim() + ":" + line.Split(':')[2].Trim();
                     }
                 }
 
@@ -1010,7 +1012,7 @@ namespace SolutionManager
                 }
 
                 // Construct the pac solution export command
-                var command = $"pac solution export --environment {selectedEnvironment.EnvironmentId} --name {selectedSolution.UniqueName} --path '{zipFilePath}'";
+                var command = $"pac solution export --environment {selectedEnvironment.EnvironmentUrl} --name {selectedSolution.UniqueName} --path '{zipFilePath}'";
 
                 if (exportAsManaged)
                 {
@@ -1219,7 +1221,7 @@ namespace SolutionManager
             if (environmentList.SelectedItem is EnvironmentProfile selectedEnvironment)
             {
                 // Construct the pac solution publish command
-                var command = $"pac solution publish --environment {selectedEnvironment.EnvironmentId} --async";
+                var command = $"pac solution publish --environment {selectedEnvironment.EnvironmentUrl} --async";
 
                 // Create a new job and add it to the jobs list
                 var job = new RunningJob
@@ -1343,7 +1345,7 @@ namespace SolutionManager
                             }
 
                             // Construct the pac solution import command
-                            var command = $"pac solution import --environment {target.EnvironmentId} --path '{solutionFilePath}'";
+                            var command = $"pac solution import --environment {target.EnvironmentUrl} --path '{solutionFilePath}'";
 
                             if (File.Exists(tempJsonFilePath))
                             {
@@ -1418,6 +1420,87 @@ namespace SolutionManager
                         }
                     }
                 }
+            }
+            else if(importEnvironmentList.SelectedItem != null)
+            {
+                var solutionFilePath = importZipPathTextBox.Text;
+                var activatePlugins = activatePluginsCheckBox.IsChecked ?? false;
+                var stageAndUpgrade = stageAndUpgradeCheckBox.IsChecked ?? false;
+                var publishAfterImport = publishAfterImportCheckBox.IsChecked ?? false;
+                var forceOverwrite = forceOverwriteCheckBox.IsChecked ?? false;
+
+                string settingsFilePath = importJsonPathTextBox.Text;
+                if (importEnvironmentList.SelectedItem is EnvironmentProfile selectedEnv)
+                {
+                    try
+                    {
+
+                        // Construct the pac solution import command
+                        var command = $"pac solution import --environment {selectedEnv.EnvironmentUrl} --path '{solutionFilePath}'";
+
+                        if (File.Exists(settingsFilePath))
+                        {
+                            command += $" --settings-file '{settingsFilePath}'";
+                        }
+
+                        if (activatePlugins)
+                        {
+                            command += " --activate-plugins";
+                        }
+
+                        if (stageAndUpgrade)
+                        {
+                            command += " --stage-and-upgrade";
+                        }
+
+                        if (publishAfterImport)
+                        {
+                            command += " --publish-changes";
+                        }
+
+                        if (forceOverwrite)
+                        {
+                            command += " --force-overwrite";
+                        }
+
+                        // Create a new job and add it to the jobs list
+                        var job = new RunningJob
+                        {
+                            Name = $"Import: {Path.GetFileName(solutionFilePath)}",
+                            Status = "Waiting",
+                            Timestamp = DateTime.Now,
+                            Environment = selectedEnv.EnvironmentId,
+                            JobLogic = async (currentJob) =>
+                            {
+                                string? output = await RunPowerShellScriptAsync(command);
+                                currentJob.Output = output ?? string.Empty;
+                                currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("success", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
+                            }
+                        };
+
+                        // Check for existing jobs with the same environment
+                        var existingJob = jobs
+                            .Where(j => j.Environment == selectedEnv.EnvironmentId && (j.Status == "In Progress" || j.Status == "Waiting"))
+                            .OrderByDescending(j => j.Timestamp)
+                            .FirstOrDefault();
+
+                        if (existingJob != null)
+                        {
+                            job.PredecessorId = existingJob.Id;
+                            EnqueueJob(job);
+                        }
+                        else
+                        {
+                            StartJob(job);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error processing target environment '{selectedEnv}': {ex.Message}");
+                    }
+                }
+
+
             }
             else
             {
@@ -1659,7 +1742,7 @@ namespace SolutionManager
                 solutionDetailsPanel.Visibility = Visibility.Collapsed;
 
                 // Retrieve the list of solutions for the selected environment
-                string? output = await RunPowerShellScriptAsync($"pac solution list -env {selectedEnvironment.EnvironmentId}");
+                string? output = await RunPowerShellScriptAsync($"pac solution list -env {selectedEnvironment.EnvironmentUrl}");
                 if (!string.IsNullOrEmpty(output))
                 {
                     // Store the output in a string variable

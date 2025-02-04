@@ -2322,6 +2322,41 @@ namespace SolutionManager
             }
         }
 
+        private void ReadEnvironmentsFromCsv()
+        {
+            string binDirectory = AppContext.BaseDirectory;
+            string csvFilePath = Path.Combine(binDirectory, "environments.csv");
+            if (!File.Exists(csvFilePath))
+            {
+                return;
+            }
+            using (var reader = new StreamReader(csvFilePath))
+            {
+                string headerLine = reader.ReadLine(); // Skip the header line
+                while (!reader.EndOfStream)
+                {
+                    var line = reader.ReadLine();
+                    var values = line.Split(',');
+                    if (values.Length >= 5)
+                    {
+                        var environmentProfile = new EnvironmentProfile
+                        {
+                            DisplayName = values[0],
+                            EnvironmentId = values[1],
+                            EnvironmentUrl = values[2],
+                            UniqueName = values[3],
+                            Active = bool.Parse(values[4])
+                        };
+                        environmentProfiles.Add(environmentProfile);
+                        environmentList.ItemsSource = null;
+                        environmentList.ItemsSource = environmentProfiles;
+                        importEnvironmentList.ItemsSource = null;
+                        importEnvironmentList.ItemsSource = environmentProfiles;
+                    }
+                }
+            }
+        }
+
         private bool EnvironmentExistsInCsv(string environmentUrl)
         {
             string binDirectory = AppContext.BaseDirectory;

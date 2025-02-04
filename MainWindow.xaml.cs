@@ -135,6 +135,10 @@ namespace SolutionManager
                 {
                     await ShowManualEnvironmentEntryDialog();
                 }
+                else
+                {
+                    ReadEnvironmentsFromCsv();
+                }
             }
             progressRingOverlay.Visibility = Visibility.Collapsed;
         }
@@ -152,7 +156,7 @@ namespace SolutionManager
                         var job = new RunningJob
                         {
                             Name = $"Retrieve Environment Info: {environmentUrl}",
-                            Status = "Successful",
+                            Status = "In Progress",
                             Timestamp = DateTime.Now,
                             Output = "Environment information already exists in CSV. Skipping 'pac env who' command."
                         };

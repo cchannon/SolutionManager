@@ -1695,16 +1695,25 @@ namespace SolutionManager
                         exportContent.Visibility = Visibility.Visible;
                         settingsContent.Visibility = Visibility.Collapsed;
                         importContent.Visibility = Visibility.Collapsed;
+                        finalizeContent.Visibility = Visibility.Collapsed;
                         break;
                     case "2. Settings":
                         exportContent.Visibility = Visibility.Collapsed;
                         settingsContent.Visibility = Visibility.Visible;
                         importContent.Visibility = Visibility.Collapsed;
+                        finalizeContent.Visibility = Visibility.Collapsed;
                         break;
                     case "3. Import":
                         exportContent.Visibility = Visibility.Collapsed;
                         settingsContent.Visibility = Visibility.Collapsed;
                         importContent.Visibility = Visibility.Visible;
+                        finalizeContent.Visibility = Visibility.Collapsed;
+                        break;
+                    case "4. Finalize":
+                        exportContent.Visibility = Visibility.Collapsed;
+                        settingsContent.Visibility = Visibility.Collapsed;
+                        importContent.Visibility = Visibility.Collapsed;
+                        finalizeContent.Visibility = Visibility.Visible;
                         break;
                 }
             }

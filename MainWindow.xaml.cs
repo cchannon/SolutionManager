@@ -2087,6 +2087,10 @@ namespace SolutionManager
             bool hasIssues = false;
             var issues = new List<string>();
 
+            // Create a dictionary to hold the updated environment settings
+            var updatedEnvObject = new Dictionary<string, JsonElement>();
+
+            // Handle EnvironmentVariables
             if (newSettings.TryGetProperty("EnvironmentVariables", out JsonElement newEnvVars) &&
                 storedSettings.TryGetProperty("EnvironmentVariables", out JsonElement storedEnvVars))
             {
@@ -2101,7 +2105,7 @@ namespace SolutionManager
 
                     if (storedEnvVar.ValueKind != JsonValueKind.Undefined)
                     {
-                        if(!string.IsNullOrEmpty(GetJsonElementValueAsString(storedEnvVar, "Value")))
+                        if (!string.IsNullOrEmpty(GetJsonElementValueAsString(storedEnvVar, "Value")))
                         {
                             continue;
                         }
@@ -2118,48 +2122,11 @@ namespace SolutionManager
                         hasIssues = true;
                         issues.Add($"New Environment Variable '{schemaName}' has an empty or null value. Select the stored config at the left to update the value.");
                     }
-                    
 
                     storedEnvVarsList.Add(newEnvVar);
                 }
 
-                // Find the correct environment object within the Environments array and update it
-                string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
-                string jsonContent = File.ReadAllText(settingsFilePath);
-                using JsonDocument document = JsonDocument.Parse(jsonContent);
-                JsonElement root = document.RootElement;
-
-                if (root.TryGetProperty("Environments", out JsonElement environments))
-                {
-                    var environmentsList = environments.EnumerateArray().ToList();
-                    for (int i = 0; i < environmentsList.Count; i++)
-                    {
-                        var env = environmentsList[i];
-                        if (env.TryGetProperty(environmentName, out JsonElement envObject))
-                        {
-                            var updatedEnvObject = new Dictionary<string, JsonElement>
-                            {
-                                { "EnvironmentVariables", JsonDocument.Parse(JsonSerializer.Serialize(storedEnvVarsList)).RootElement }
-                            };
-
-                            var updatedEnv = new Dictionary<string, JsonElement>
-                            {
-                                { environmentName, JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvObject)).RootElement }
-                            };
-
-                            environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
-                            break;
-                        }
-                    }
-
-                    var updatedJson = new
-                    {
-                        Environments = environmentsList
-                    };
-
-                    string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(settingsFilePath, updatedJsonContent);
-                }
+                updatedEnvObject["EnvironmentVariables"] = JsonDocument.Parse(JsonSerializer.Serialize(storedEnvVarsList)).RootElement;
             }
 
             // Handle ConnectionReferences
@@ -2200,43 +2167,46 @@ namespace SolutionManager
                     storedConnRefsList.Add(newConnRef);
                 }
 
-                // Find the correct environment object within the Environments array and update it
-                string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
-                string jsonContent = File.ReadAllText(settingsFilePath);
-                using JsonDocument document = JsonDocument.Parse(jsonContent);
-                JsonElement root = document.RootElement;
+                updatedEnvObject["ConnectionReferences"] = JsonDocument.Parse(JsonSerializer.Serialize(storedConnRefsList)).RootElement;
+            }
 
-                if (root.TryGetProperty("Environments", out JsonElement environments))
+            // Find the correct environment object within the Environments array and update it
+            string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
+            string jsonContent = File.ReadAllText(settingsFilePath);
+            using JsonDocument document = JsonDocument.Parse(jsonContent);
+            JsonElement root = document.RootElement;
+
+            if (root.TryGetProperty("Environments", out JsonElement environments))
+            {
+                var environmentsList = environments.EnumerateArray().ToList();
+                for (int i = 0; i < environmentsList.Count; i++)
                 {
-                    var environmentsList = environments.EnumerateArray().ToList();
-                    for (int i = 0; i < environmentsList.Count; i++)
+                    var env = environmentsList[i];
+                    if (env.TryGetProperty(environmentName, out JsonElement envObject))
                     {
-                        var env = environmentsList[i];
-                        if (env.TryGetProperty(environmentName, out JsonElement envObject))
+                        var envDict = envObject.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+                        foreach (var kvp in updatedEnvObject)
                         {
-                            var updatedEnvObject = new Dictionary<string, JsonElement>
-                    {
-                        { "ConnectionReferences", JsonDocument.Parse(JsonSerializer.Serialize(storedConnRefsList)).RootElement }
-                    };
-
-                            var updatedEnv = new Dictionary<string, JsonElement>
-                    {
-                        { environmentName, JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvObject)).RootElement }
-                    };
-
-                            environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
-                            break;
+                            envDict[kvp.Key] = kvp.Value;
                         }
+
+                        var updatedEnv = new Dictionary<string, JsonElement>
+                {
+                    { environmentName, JsonDocument.Parse(JsonSerializer.Serialize(envDict)).RootElement }
+                };
+
+                        environmentsList[i] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnv)).RootElement;
+                        break;
                     }
-
-                    var updatedJson = new
-                    {
-                        Environments = environmentsList
-                    };
-
-                    string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(settingsFilePath, updatedJsonContent);
                 }
+
+                var updatedJson = new
+                {
+                    Environments = environmentsList
+                };
+
+                string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(settingsFilePath, updatedJsonContent);
             }
 
             if (hasIssues)

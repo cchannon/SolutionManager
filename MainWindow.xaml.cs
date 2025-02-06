@@ -31,7 +31,7 @@ namespace SolutionManager
         private static IConfidentialClientApplication _msalClient;
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
-        private static string _tenantId = ""; // Replace with your tenant ID
+        private static string _tenantId = ""; // Replace with your tenant ID // Replace with your tenant ID
         private static string[] _scopes = ["https://graph.microsoft.com/.default"];
 
         List<AuthProfile> authProfiles = new();
@@ -792,6 +792,10 @@ namespace SolutionManager
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
             var folder = await picker.PickSingleFolderAsync();
+            if(folder == null)
+            {
+                return;
+            }
 
             string command = $"pac solution create-settings -z '{settingsSolutionZipTextBox.Text}' -s '{Path.Combine(folder.Path,  Path.GetFileNameWithoutExtension(settingsSolutionZipTextBox.Text) +"settings.json")}'";
 
@@ -1680,7 +1684,7 @@ namespace SolutionManager
             var folder = await picker.PickSingleFolderAsync();
             if (folder != null)
             {
-                string filePath = Path.Combine(folder.Path, "JobLog.csv");
+                string filePath = Path.Combine(folder.Path, "JobLog.docx");
                 await ExportJobLogToDocx(filePath);
             }
         }

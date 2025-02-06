@@ -2091,49 +2091,41 @@ namespace SolutionManager
             var updatedEnvObject = new Dictionary<string, JsonElement>();
 
             // Handle EnvironmentVariables
-            if (newSettings.TryGetProperty("EnvironmentVariables", out JsonElement newEnvVars) &&
-                storedSettings.TryGetProperty("EnvironmentVariables", out JsonElement storedEnvVars))
+            if (newSettings.TryGetProperty("EnvironmentVariables", out JsonElement newEnvVars))
             {
-                var storedEnvVarsList = storedEnvVars.EnumerateArray().ToList();
+                var updatedEnvVarsList = new List<JsonElement>();
                 foreach (JsonElement newEnvVar in newEnvVars.EnumerateArray())
                 {
                     string schemaName = newEnvVar.GetProperty("SchemaName").GetString();
                     string? newValue = GetJsonElementValueAsString(newEnvVar, "Value");
 
                     // Check if the schemaName exists in storedSettings
-                    var storedEnvVar = storedEnvVarsList.FirstOrDefault(ev => ev.GetProperty("SchemaName").GetString() == schemaName);
-
-                    if (storedEnvVar.ValueKind != JsonValueKind.Undefined)
+                    if (storedSettings.TryGetProperty("EnvironmentVariables", out JsonElement storedEnvVars))
                     {
-                        if (!string.IsNullOrEmpty(GetJsonElementValueAsString(storedEnvVar, "Value")))
+                        var storedEnvVar = storedEnvVars.EnumerateArray().FirstOrDefault(ev => ev.GetProperty("SchemaName").GetString() == schemaName);
+                        if (storedEnvVar.ValueKind != JsonValueKind.Undefined)
                         {
-                            continue;
-                        }
-                        else
-                        {
-                            hasIssues = true;
-                            issues.Add($"Existing Environment Variable '{schemaName}' has an empty or null value.");
-                            continue;
+                            newValue = GetJsonElementValueAsString(storedEnvVar, "Value");
                         }
                     }
 
-                    if (string.IsNullOrEmpty(newValue))
+                    // Create a new environment variable with the updated value
+                    var updatedEnvVar = new Dictionary<string, JsonElement>
                     {
-                        hasIssues = true;
-                        issues.Add($"New Environment Variable '{schemaName}' has an empty or null value. Select the stored config at the left to update the value.");
-                    }
+                        { "SchemaName", JsonDocument.Parse(JsonSerializer.Serialize(schemaName)).RootElement },
+                        { "Value", JsonDocument.Parse(JsonSerializer.Serialize(newValue)).RootElement }
+                    };
 
-                    storedEnvVarsList.Add(newEnvVar);
+                    updatedEnvVarsList.Add(JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvVar)).RootElement);
                 }
 
-                updatedEnvObject["EnvironmentVariables"] = JsonDocument.Parse(JsonSerializer.Serialize(storedEnvVarsList)).RootElement;
+                updatedEnvObject["EnvironmentVariables"] = JsonDocument.Parse(JsonSerializer.Serialize(updatedEnvVarsList)).RootElement;
             }
 
             // Handle ConnectionReferences
-            if (newSettings.TryGetProperty("ConnectionReferences", out JsonElement newConnRefs) &&
-                storedSettings.TryGetProperty("ConnectionReferences", out JsonElement storedConnRefs))
+            if (newSettings.TryGetProperty("ConnectionReferences", out JsonElement newConnRefs))
             {
-                var storedConnRefsList = storedConnRefs.EnumerateArray().ToList();
+                var updatedConnRefsList = new List<JsonElement>();
                 foreach (JsonElement newConnRef in newConnRefs.EnumerateArray())
                 {
                     string logicalName = newConnRef.GetProperty("LogicalName").GetString();
@@ -2141,33 +2133,57 @@ namespace SolutionManager
                     string? newConnectorId = GetJsonElementValueAsString(newConnRef, "ConnectorId");
 
                     // Check if the logicalName exists in storedSettings
-                    var storedConnRef = storedConnRefsList.FirstOrDefault(cr => cr.GetProperty("LogicalName").GetString() == logicalName);
-
-                    if (storedConnRef.ValueKind != JsonValueKind.Undefined)
+                    if (storedSettings.TryGetProperty("ConnectionReferences", out JsonElement storedConnRefs))
                     {
-                        if (!string.IsNullOrEmpty(GetJsonElementValueAsString(storedConnRef, "ConnectionId")) &&
-                            !string.IsNullOrEmpty(GetJsonElementValueAsString(storedConnRef, "ConnectorId")))
+                        var storedConnRef = storedConnRefs.EnumerateArray().FirstOrDefault(cr => cr.GetProperty("LogicalName").GetString() == logicalName);
+                        if (storedConnRef.ValueKind != JsonValueKind.Undefined)
                         {
-                            continue;
-                        }
-                        else
-                        {
-                            hasIssues = true;
-                            issues.Add($"Existing Connection Reference '{logicalName}' has an empty or null ConnectionId or ConnectorId.");
-                            continue;
+                            newConnectionId = GetJsonElementValueAsString(storedConnRef, "ConnectionId");
+                            newConnectorId = GetJsonElementValueAsString(storedConnRef, "ConnectorId");
                         }
                     }
 
-                    if (string.IsNullOrEmpty(newConnectionId) || string.IsNullOrEmpty(newConnectorId))
+                    // Create a new connection reference with the updated values
+                    var updatedConnRef = new Dictionary<string, JsonElement>
                     {
-                        hasIssues = true;
-                        issues.Add($"New Connection Reference '{logicalName}' has an empty or null ConnectionId or ConnectorId. Select the stored config at the left to update the value.");
-                    }
+                        { "LogicalName", JsonDocument.Parse(JsonSerializer.Serialize(logicalName)).RootElement },
+                        { "ConnectionId", JsonDocument.Parse(JsonSerializer.Serialize(newConnectionId)).RootElement },
+                        { "ConnectorId", JsonDocument.Parse(JsonSerializer.Serialize(newConnectorId)).RootElement }
+                    };
 
-                    storedConnRefsList.Add(newConnRef);
+                    updatedConnRefsList.Add(JsonDocument.Parse(JsonSerializer.Serialize(updatedConnRef)).RootElement);
                 }
 
-                updatedEnvObject["ConnectionReferences"] = JsonDocument.Parse(JsonSerializer.Serialize(storedConnRefsList)).RootElement;
+                updatedEnvObject["ConnectionReferences"] = JsonDocument.Parse(JsonSerializer.Serialize(updatedConnRefsList)).RootElement;
+            }
+
+            // Check for missing values and log issues
+            if (updatedEnvObject.TryGetValue("EnvironmentVariables", out JsonElement updatedEnvVars))
+            {
+                foreach (JsonElement envVar in updatedEnvVars.EnumerateArray())
+                {
+                    string schemaName = envVar.GetProperty("SchemaName").GetString();
+                    string? value = GetJsonElementValueAsString(envVar, "Value");
+                    if (string.IsNullOrEmpty(value))
+                    {
+                        hasIssues = true;
+                        issues.Add($"Environment Variable '{schemaName}' has an empty or null value.");
+                    }
+                }
+            }
+
+            if (updatedEnvObject.TryGetValue("ConnectionReferences", out JsonElement updatedConnRefs))
+            {
+                foreach (JsonElement connRef in updatedConnRefs.EnumerateArray())
+                {
+                    string logicalName = connRef.GetProperty("LogicalName").GetString();
+                    string? connectionId = GetJsonElementValueAsString(connRef, "ConnectionId");
+                    if (string.IsNullOrEmpty(connectionId))
+                    {
+                        hasIssues = true;
+                        issues.Add($"Connection Reference '{logicalName}' has an empty or null ConnectionId.");
+                    }
+                }
             }
 
             // Find the correct environment object within the Environments array and update it

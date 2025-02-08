@@ -169,16 +169,19 @@
                                         <Button x:Name="exportPathBrowse" Content="Browse" Click="BrowseFolderButton_Click" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" Grid.Column="1"/>
                                     </Grid>
                                     <!-- Versioning -->
-                                    <TextBlock Text="Solution Version:" VerticalAlignment="Center" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" Grid.Column="0" Grid.Row="2"/>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="0" Grid.Row="2" Spacing="10">
+                                        <TextBlock Text="Solution Version:" VerticalAlignment="Center" Foreground="{ThemeResource SystemBaseHighColor}" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="currentVersionDisplayText" Text="" Foreground="{ThemeResource SystemBaseHighColor}" FontStyle="Italic"/>
+                                    </StackPanel>
                                     <ItemsControl Grid.Column="0" Grid.Row="3">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <ItemsWrapGrid Orientation="Horizontal" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
-                                        <RadioButton x:Name="solutionStrategyRadioButton" Content="Solution Strategy" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" IsChecked="True" Margin="5" Height="30"/>
-                                        <RadioButton x:Name="customStrategyRadioButton" Content="Custom" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" Height="30"/>
-                                        <RadioButton x:Name="noStrategyRadioButton" Content="Unchanged" GroupName="VersioningStrategy" Checked="solutionStrategy_Checked" Margin="5" Height="30"/>
+                                        <RadioButton x:Name="solutionStrategyRadioButton" Content="Solution Strategy" GroupName="VersioningStrategy" Checked="SolutionStrategy_Checked" IsChecked="True" Margin="5" Height="30"/>
+                                        <RadioButton x:Name="customStrategyRadioButton" Content="Custom" GroupName="VersioningStrategy" Checked="SolutionStrategy_Checked" Margin="5" Height="30"/>
+                                        <RadioButton x:Name="noStrategyRadioButton" Content="Unchanged" GroupName="VersioningStrategy" Checked="SolutionStrategy_Checked" Margin="5" Height="30"/>
                                     </ItemsControl>
                                     <Grid x:Name="customVersionPanel" Grid.Column="0" Grid.Row="4" Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>

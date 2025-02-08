@@ -28,10 +28,10 @@ namespace SolutionManager
 {
     public sealed partial class MainWindow : Window
     {
-        private static IConfidentialClientApplication _msalClient;
+        private static IConfidentialClientApplication? _msalClient;
         private static string _clientId = ""; // Replace with your client ID
         private static string _clientSecret = ""; // Replace with your client secret
-        private static string _tenantId = ""; // Replace with your tenant ID // Replace with your tenant ID
+        private static string _tenantId = ""; // Replace with your tenant ID
         private static string[] _scopes = ["https://graph.microsoft.com/.default"];
 
         List<AuthProfile> authProfiles = new();
@@ -40,9 +40,7 @@ namespace SolutionManager
         ObservableCollection<RunningJob> jobs = new();
         ObservableCollection<string> matchingSettings = new();
         private Queue<RunningJob> jobQueue = new();
-        object settingsObject;
-        string userToken = null;
-        bool noEnvironmentsFound = false;
+        string? userToken = null;
 
         public MainWindow()
         {
@@ -57,7 +55,7 @@ namespace SolutionManager
             string binDirectory = AppContext.BaseDirectory;
         }
 
-        private DoubleAnimation CreateFadeAnimation()
+        private static DoubleAnimation CreateFadeAnimation()
         {
             //just a simple helper to clean up the Grid_Loaded method
             return new DoubleAnimation
@@ -132,7 +130,6 @@ namespace SolutionManager
             }
             else if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") != -1)
             {
-                noEnvironmentsFound = true;
                 addEnvironmentButton.Visibility = Visibility.Visible;
                 if (!CsvFileHasRows())
                 {
@@ -173,6 +170,7 @@ namespace SolutionManager
                             Name = $"Retrieve Environment Info: {environmentUrl}",
                             Status = "Waiting",
                             Timestamp = DateTime.Now,
+                            Output = $"pac env who -env {environmentUrl}{Environment.NewLine}",
                             JobLogic = async (currentJob) =>
                             {
                                 string command = $"pac env who -env {environmentUrl}";
@@ -192,18 +190,18 @@ namespace SolutionManager
                                         });
                                         SaveEnvironmentToCsv(environmentProfile); // Save to CSV
                                         currentJob.Status = "Successful";
-                                        currentJob.Output = output;
+                                        currentJob.Output += output;
                                     }
                                     else
                                     {
                                         currentJob.Status = "Failed";
-                                        currentJob.Output = output;
+                                        currentJob.Output += output;
                                     }
                                 }
                                 else
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = output;
+                                    currentJob.Output += output;
                                 }
                             }
                         };
@@ -276,7 +274,7 @@ namespace SolutionManager
             return environments;
         }
 
-        private async Task<string?> RunPowerShellScriptAsync(string scriptText, string workingDirectory = "")
+        private static async Task<string?> RunPowerShellScriptAsync(string scriptText, string workingDirectory = "")
         {
             try
             {
@@ -316,7 +314,7 @@ namespace SolutionManager
         #endregion
 
         #region pac return parsing
-        private List<AuthProfile> ParseAuthProfiles(string output)
+        private static List<AuthProfile> ParseAuthProfiles(string output)
         {
             var authProfiles = new List<AuthProfile>();
             var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
@@ -353,7 +351,7 @@ namespace SolutionManager
             return authProfiles;
         }
 
-        private List<EnvironmentProfile> ParseEnvironmentProfiles(string output)
+        private static List<EnvironmentProfile> ParseEnvironmentProfiles(string output)
         {
             var environmentProfiles = new List<EnvironmentProfile>();
             var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
@@ -386,7 +384,7 @@ namespace SolutionManager
             return environmentProfiles;
         }
 
-        private EnvironmentProfile? ParseEnvironmentInfo(string output)
+        private static EnvironmentProfile? ParseEnvironmentInfo(string output)
         {
             try
             {
@@ -435,7 +433,7 @@ namespace SolutionManager
             return null;
         }
 
-        private List<SolutionProfile> ParseSolutionProfiles(string output)
+        private static List<SolutionProfile> ParseSolutionProfiles(string output)
         {
             var solutionProfiles = new List<SolutionProfile>();
             var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
@@ -702,7 +700,8 @@ namespace SolutionManager
                 var scrollViewer = new ScrollViewer
                 {
                     Content = listBox,
-                    MaxHeight = 300 // Set a maximum height for the ScrollViewer
+                    MaxHeight = 300, // Set a maximum height for the ScrollViewer
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto
                 };
 
                 dialog.Content = scrollViewer;
@@ -1047,18 +1046,19 @@ namespace SolutionManager
                     Status = "Waiting",
                     Timestamp = DateTime.Now,
                     Environment = selectedEnvironment.EnvironmentId,
+                    Output = $"{command}{Environment.NewLine}",
                     JobLogic = async (currentJob) =>
                     {
                         string? output = await RunPowerShellScriptAsync(command);
                         if (string.IsNullOrEmpty(output) || !output.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
                         {
                             currentJob.Status = "Failed";
-                            currentJob.Output = output ?? string.Empty;
+                            currentJob.Output += output ?? string.Empty;
                             return;
                         }
 
                         currentJob.Status = "Successful";
-                        currentJob.Output = output ?? string.Empty;
+                        currentJob.Output += output ?? string.Empty;
                     }
                 };
 
@@ -1136,6 +1136,7 @@ namespace SolutionManager
                             {
                                 command += " -s solution";
                             }
+                            currentJob.Output = $"{command}{Environment.NewLine}";
                             string? output = await RunPowerShellScriptAsync(command);
                             if (string.IsNullOrEmpty(output) || !output.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
                             {
@@ -1156,7 +1157,7 @@ namespace SolutionManager
                             Directory.Delete(tempDirectory, true);
 
                             currentJob.Status = "Successful";
-                            currentJob.Output = output ?? string.Empty;
+                            currentJob.Output += output ?? string.Empty;
                         }
                     };
                     vjobid = versionJob.Id;
@@ -1178,41 +1179,44 @@ namespace SolutionManager
                             {
                                 // Run git add
                                 string gitAddCommand = "git add .";
+                                currentJob.Output = $"{gitAddCommand}{Environment.NewLine}";
                                 string? gitAddOutput = await RunPowerShellScriptAsync(gitAddCommand, zipFilePath);
                                 if (string.IsNullOrEmpty(gitAddOutput))
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = "Git add failed.";
+                                    currentJob.Output += "Git add failed.";
                                     return;
                                 }
 
                                 // Run git commit
                                 string gitCommitCommand = "git commit -m \"Solution exported via Air Traffic Control Tower\"";
+                                currentJob.Output += $"{gitCommitCommand}{Environment.NewLine}";
                                 string? gitCommitOutput = await RunPowerShellScriptAsync(gitCommitCommand, zipFilePath);
                                 if (string.IsNullOrEmpty(gitCommitOutput))
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = "Git commit failed.";
+                                    currentJob.Output += "Git commit failed.";
                                     return;
                                 }
 
                                 // Run git push
                                 string gitPushCommand = "git push";
+                                currentJob.Output += $"{gitPushCommand}{Environment.NewLine}";
                                 string? gitPushOutput = await RunPowerShellScriptAsync(gitPushCommand, zipFilePath);
                                 if (string.IsNullOrEmpty(gitPushOutput))
                                 {
                                     currentJob.Status = "Failed";
-                                    currentJob.Output = "Git push failed.";
+                                    currentJob.Output += "Git push failed.";
                                     return;
                                 }
 
                                 currentJob.Status = "Successful";
-                                currentJob.Output = "Git add, commit, and push succeeded.";
+                                currentJob.Output += "Git add, commit, and push succeeded.";
                             }
                             catch (Exception ex)
                             {
                                 currentJob.Status = "Failed";
-                                currentJob.Output = $"Error: {ex.Message}";
+                                currentJob.Output += $"Error: {ex.Message}";
                             }
                         }
                     };
@@ -1241,10 +1245,11 @@ namespace SolutionManager
                     Status = "In Progress",
                     Timestamp = DateTime.Now,
                     Environment = selectedEnvironment.EnvironmentId,
+                    Output = $"{command}{Environment.NewLine}",
                     JobLogic = async (currentJob) =>
                     {
                         string? output = await RunPowerShellScriptAsync(command);
-                        currentJob.Output = output ?? string.Empty;
+                        currentJob.Output += output ?? string.Empty;
                         currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("successfully", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
                     }
                 };
@@ -1316,7 +1321,7 @@ namespace SolutionManager
                 {
                     var target = environmentList.Items
                         .Cast<EnvironmentProfile>()
-                        .FirstOrDefault(env => env.DisplayName == targetName);
+                        .FirstOrDefault(env => env.DisplayName == targetName.Replace("⚠️ ", ""));
                     if (target != null)
                     {
                         var solutionFilePath = importZipPathTextBox.Text;
@@ -1356,7 +1361,7 @@ namespace SolutionManager
                             }
 
                             // Construct the pac solution import command
-                            var command = $"pac solution import --environment {target.EnvironmentUrl} --path '{solutionFilePath}'";
+                            var command = $"pac solution import --environment {target.EnvironmentUrl} --path '{solutionFilePath}' -a";
 
                             if (File.Exists(tempJsonFilePath))
                             {
@@ -1390,10 +1395,11 @@ namespace SolutionManager
                                 Status = "Waiting",
                                 Timestamp = DateTime.Now,
                                 Environment = target.EnvironmentId,
+                                Output = command,
                                 JobLogic = async (currentJob) =>
                                 {
                                     string? output = await RunPowerShellScriptAsync(command);
-                                    currentJob.Output = output ?? string.Empty;
+                                    currentJob.Output += output ?? string.Empty;
                                     currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("success", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
 
                                     // Delete the temporary JSON file
@@ -1481,10 +1487,11 @@ namespace SolutionManager
                             Status = "Waiting",
                             Timestamp = DateTime.Now,
                             Environment = selectedEnv.EnvironmentId,
+                            Output = $"{command}{Environment.NewLine}",
                             JobLogic = async (currentJob) =>
                             {
                                 string? output = await RunPowerShellScriptAsync(command);
-                                currentJob.Output = output ?? string.Empty;
+                                currentJob.Output += output ?? string.Empty;
                                 currentJob.Status = !string.IsNullOrEmpty(output) && output.Contains("success", StringComparison.OrdinalIgnoreCase) ? "Successful" : "Failed";
                             }
                         };
@@ -1616,6 +1623,7 @@ namespace SolutionManager
                                         settingsUpdateTextBox.Visibility = Visibility.Collapsed;
                                         settingsUpdateCommands.Visibility = Visibility.Collapsed;
                                         settingsLogTextBlock.Visibility = Visibility.Visible;
+
                                         return;
                                     }
                                 }
@@ -1723,7 +1731,7 @@ namespace SolutionManager
             }
         }
 
-        private void solutionStrategy_Checked(object sender, RoutedEventArgs e)
+        private void SolutionStrategy_Checked(object sender, RoutedEventArgs e)
         {
             if (sender is RadioButton radioButton && radioButton.Content != null)
             {
@@ -1783,8 +1791,28 @@ namespace SolutionManager
 
         private void SolutionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (solutionsList.SelectedItem is SolutionProfile selectedSolution)
+            if (environmentList.SelectedItem is EnvironmentProfile selectedEnvironment &&
+                solutionsList.SelectedItem is SolutionProfile selectedSolution)
             {
+                var query = new QueryExpression("solution")
+                {
+                    ColumnSet = new ColumnSet("version"),
+                    Criteria = new FilterExpression
+                    {
+                        Conditions =
+                                {
+                                    new ConditionExpression("uniquename", ConditionOperator.Equal, selectedSolution.UniqueName)
+                                }
+                    }
+                };
+                var serviceClient = GetServiceClient(selectedEnvironment.EnvironmentUrl);
+
+                var solutions = serviceClient.RetrieveMultiple(query).Entities;
+                if (solutions.Count > 0)
+                {
+                    currentVersionDisplayText.Text = "(currently " + solutions.First().GetAttributeValue<string>("version") + ")";
+                }
+
                 solutionDetailsPanel.Visibility = Visibility.Visible;
             }
             else
@@ -1876,7 +1904,7 @@ namespace SolutionManager
 
         #region Helper Methods
 
-        private void InitializeMsalClient()
+        private static void InitializeMsalClient()
         {
             _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
                 .WithClientSecret(_clientSecret)
@@ -1889,7 +1917,7 @@ namespace SolutionManager
             //    .Build();
         }
 
-        private ServiceClient GetServiceClient(string organizationUrl)
+        private static ServiceClient GetServiceClient(string organizationUrl)
         {
             try
             {
@@ -1908,35 +1936,7 @@ namespace SolutionManager
             }
         }
 
-        //private async Task<ServiceClient> GetServiceClientAsync(string organizationUrl)
-        //{
-        //    try
-        //    {
-        //        var connectionString = $"AuthType=OAuth;ServiceUri={organizationUrl};AccessToken={userToken};";
-        //        var serviceClient = new ServiceClient(connectionString);
-        //        return serviceClient;
-        //    }
-        //    catch
-        //    {
-        //        try
-        //        {
-        //            var result = await SignInUserAsync();
-        //            userToken = result.AccessToken;
-        //            var connectionString = $"AuthType=OAuth;ServiceUri={organizationUrl};AccessToken={userToken};";
-        //            var serviceClient = new ServiceClient(connectionString);
-        //            return serviceClient;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Debug.WriteLine($"Error acquiring token: {ex.Message}");
-
-        //            //This is ok for now, but eventually we need to store this failure and then hide the option to increment version on server
-        //            return null;
-        //        }
-        //    }
-        //}
-
-        private async Task<AuthenticationResult> SignInUserAsync()
+        private static async Task<AuthenticationResult> SignInUserAsync()
         {
             AuthenticationResult result = null;
 
@@ -1977,7 +1977,7 @@ namespace SolutionManager
             return result;
         }
 
-        private void CopyDirectory(string sourceDir, string targetDir)
+        private static void CopyDirectory(string sourceDir, string targetDir)
         {
             Directory.CreateDirectory(targetDir);
 
@@ -1994,7 +1994,7 @@ namespace SolutionManager
             }
         }
 
-        private string GetSettingsFilePath(string solutionZipPath)
+        private static string GetSettingsFilePath(string solutionZipPath)
         {
             string tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDirectory);
@@ -2256,7 +2256,7 @@ namespace SolutionManager
             }
         }
 
-        private string? GetJsonElementValueAsString(JsonElement element, string propertyName)
+        private static string? GetJsonElementValueAsString(JsonElement element, string propertyName)
         {
             try
             {
@@ -2289,7 +2289,7 @@ namespace SolutionManager
             return null;
         }
 
-        private bool IsValidJson(string jsonString)
+        private static bool IsValidJson(string jsonString)
         {
             try
             {
@@ -2308,7 +2308,7 @@ namespace SolutionManager
             errorDialog.ShowAsync();
         }
 
-        private void SaveEnvironmentToCsv(EnvironmentProfile environmentProfile)
+        private static void SaveEnvironmentToCsv(EnvironmentProfile environmentProfile)
         {
             string binDirectory = AppContext.BaseDirectory;
             string csvFilePath = Path.Combine(binDirectory, "environments.csv");
@@ -2363,7 +2363,7 @@ namespace SolutionManager
             }
         }
 
-        private bool EnvironmentExistsInCsv(string environmentUrl)
+        private static bool EnvironmentExistsInCsv(string environmentUrl)
         {
             string binDirectory = AppContext.BaseDirectory;
             string csvFilePath = Path.Combine(binDirectory, "environments.csv");
@@ -2391,7 +2391,7 @@ namespace SolutionManager
             return false;
         }
 
-        private bool CsvFileHasRows()
+        private static bool CsvFileHasRows()
         {
             string binDirectory = AppContext.BaseDirectory;
             string csvFilePath = Path.Combine(binDirectory, "environments.csv");
@@ -2448,7 +2448,7 @@ namespace SolutionManager
             }
         }
 
-        private void AddParagraph(Body body, string text, bool isBold)
+        private static void AddParagraph(Body body, string text, bool isBold)
         {
             Paragraph paragraph = new Paragraph();
             Run run = new Run();

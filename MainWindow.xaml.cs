@@ -1527,7 +1527,7 @@ namespace SolutionManager
             }
         }
 
-        private void SettingsUpdateButton_Click(object sender, RoutedEventArgs e)
+        private void SettingsUpdateButton_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             if (matchingConfigsListBox.SelectedItem is string selectedConfig)
             {
@@ -1578,56 +1578,7 @@ namespace SolutionManager
                             File.WriteAllText(settingsFilePath, updatedJsonContent);
 
                             settingsLogTextBlock.Text = $"Settings for {selectedC} updated successfully." + Environment.NewLine;
-                            settingsLogTextBlock.Visibility = Visibility.Visible;
-                            settingsUpdateCommands.Visibility = Visibility.Collapsed;
-                            settingsUpdateTextBox.Visibility = Visibility.Collapsed;
                             matchingConfigsListBox.SelectedItem = null;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
-                }
-            }
-        }
-
-        private void SettingsUpdateCancelButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (matchingConfigsListBox.SelectedItem is string selectedConfig)
-            {
-                string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
-                try
-                {
-                    string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
-
-                    if (File.Exists(settingsFilePath))
-                    {
-                        string jsonContent = File.ReadAllText(settingsFilePath);
-                        using JsonDocument document = JsonDocument.Parse(jsonContent);
-                        JsonElement root = document.RootElement;
-
-                        if (root.TryGetProperty("Environments", out JsonElement environments))
-                        {
-                            foreach (JsonElement env in environments.EnumerateArray())
-                            {
-                                foreach (JsonProperty envProperty in env.EnumerateObject())
-                                {
-                                    if (envProperty.Name == selectedC)
-                                    {
-                                        string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
-                                        settingsUpdateTextBox.Text = jsonValue;
-                                        settingsLogTextBlock.Text = $"Changes for {selectedC} have been reverted." + Environment.NewLine;
-
-                                        matchingConfigsListBox.SelectedItem = null;
-                                        settingsUpdateTextBox.Visibility = Visibility.Collapsed;
-                                        settingsUpdateCommands.Visibility = Visibility.Collapsed;
-                                        settingsLogTextBlock.Visibility = Visibility.Visible;
-
-                                        return;
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -1663,9 +1614,7 @@ namespace SolutionManager
                                     {
                                         string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
                                         settingsUpdateTextBox.Text = jsonValue;
-                                        settingsUpdateTextBox.Visibility = Visibility.Visible;
-                                        settingsUpdateCommands.Visibility = Visibility.Visible;
-                                        settingsLogTextBlock.Visibility = Visibility.Collapsed;
+                                        settingsUpdateDialog.ShowAsync();
                                         return;
                                     }
                                 }
@@ -1865,23 +1814,8 @@ namespace SolutionManager
                                     if (envProperty.Name == selectedC)
                                     {
                                         string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
-
-                                        if (selectedConfig.IndexOf("⚠️ ") != -1)
-                                        {
-                                            settingsUpdateTextBox.Text = jsonValue;
-                                            settingsUpdateTextBox.Visibility = Visibility.Visible;
-                                            settingsUpdateCommands.Visibility = Visibility.Visible;
-                                            settingsLogTextBlock.Visibility = Visibility.Collapsed;
-                                            return;
-                                        }
-                                        else
-                                        {
-                                            settingsLogTextBlock.Text = jsonValue;
-                                            settingsLogTextBlock.Visibility = Visibility.Visible;
-                                            settingsUpdateTextBox.Visibility = Visibility.Collapsed;
-                                            settingsUpdateCommands.Visibility = Visibility.Collapsed;
-                                            return;
-                                        }
+                                        settingsLogTextBlock.Text = jsonValue;
+                                        return;
                                     }
                                 }
                             }
@@ -1910,11 +1844,6 @@ namespace SolutionManager
                 .WithClientSecret(_clientSecret)
                 .WithAuthority(new Uri($"https://login.microsoftonline.us/{_tenantId}"))
                 .Build();
-
-            //_msalClient = PublicClientApplicationBuilder.Create(_clientId)
-            //    .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
-            //    .WithDefaultRedirectUri()
-            //    .Build();
         }
 
         private static ServiceClient GetServiceClient(string organizationUrl)

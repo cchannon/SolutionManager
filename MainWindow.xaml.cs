@@ -1361,7 +1361,7 @@ namespace SolutionManager
                             }
 
                             // Construct the pac solution import command
-                            var command = $"pac solution import --environment {target.EnvironmentUrl} --path '{solutionFilePath}' -a";
+                            var command = $"pac solution import --environment {target.EnvironmentUrl} --path '{solutionFilePath}' -a -wt 200";
 
                             if (File.Exists(tempJsonFilePath))
                             {

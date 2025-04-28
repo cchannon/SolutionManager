@@ -9,6 +9,12 @@
         Title="The Air Traffic Control Tower">
     <Page>
         <Page.Resources>
+            <!-- Converters -->
+            <local:IsFavoriteConverter x:Key="IsFavoriteConverter" />
+            <local:IsFavoriteForegroundConverter x:Key="IsFavoriteForegroundConverter" />
+            <local:JobStatusVisibilityConverter x:Key="JobStatusVisibilityConverter" />
+            <local:JobStatusTooltipConverter x:Key="JobStatusTooltipConverter" />
+            <local:JobStatusWidthConverter x:Key="JobStatusWidthConverter" />
             <!-- Custom Radio Button Styles to make bottom of page Pivot -->
             <Style TargetType="RadioButton">
                 <Setter Property="Template">
@@ -176,14 +182,15 @@
                                          SelectionChanged="EnvironmentList_SelectionChanged"
                                          ItemsSource="{Binding EnvironmentProfiles}"
                                          DisplayMemberPath="DisplayName"
-                                         Style="{StaticResource RoundedListBoxStyle}" />
+                                         Style="{StaticResource RoundedListBoxStyle}" >
+                                </ListBox>
                             </ScrollViewer>
                             <Button x:Name="addEnvironmentButton"
                                     Content="Add Environment"
                                     Click="AddEnvironmentButton_Click"
                                     Background="{ThemeResource SystemControlHighlightAccentBrush}"
                                     Foreground="White"
-                                    Visibility="Collapsed"
+                                    Visibility="Visible"
                                     Grid.Row="2"
                                     HorizontalAlignment="Center"
                                     Margin="10" />
@@ -211,9 +218,24 @@
                                 <ListBox x:Name="solutionsList"
                                          SelectionChanged="SolutionList_SelectionChanged"
                                          ItemsSource="{Binding SolutionProfiles}"
-                                         DisplayMemberPath="FriendlyName"
                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                         Style="{StaticResource RoundedListBoxStyle}" />
+                                         Style="{StaticResource RoundedListBoxStyle}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
+                                                <Button x:Name="toggleFavorite"
+                                                        Content="{Binding IsFavorite, Converter={StaticResource IsFavoriteConverter}}"
+                                                        FontSize="18"
+                                                        Click="ToggleFavorite_Click"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Foreground="{Binding IsFavorite, Converter={StaticResource IsFavoriteForegroundConverter}}" />
+                                                <TextBlock Text="{Binding FriendlyName}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </ScrollViewer>
                         </Grid>
                         <!-- Solution Details Panel -->
@@ -845,7 +867,12 @@
                                  Style="{StaticResource RoundedListBoxStyle}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding DisplayName}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="{Binding Status, Converter={StaticResource JobStatusWidthConverter}}" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding DisplayName}" Grid.Column="0" VerticalAlignment="Center">
                                         <ToolTipService.ToolTip>
                                             <ToolTip>
                                                 <TextBlock>
@@ -859,6 +886,24 @@
                                             </ToolTip>
                                         </ToolTipService.ToolTip>
                                     </TextBlock>
+                                    <Button x:Name="JobCancelButton"
+                                                VerticalAlignment="Center"    
+                                                Grid.Column="1"
+                                                Content="❌"
+                                                FontSize="14"
+                                                Click="JobCancelButton_Click"
+                                                CommandParameter="{Binding}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Foreground="Red"
+                                                Visibility="{Binding Status, Converter={StaticResource JobStatusVisibilityConverter}}" >
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock Text="{Binding Status, Converter={StaticResource JobStatusTooltipConverter}}"/>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </Button>
+                                    </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>

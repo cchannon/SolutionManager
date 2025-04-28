@@ -23,6 +23,7 @@ using System.Net.Http;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using SolutionManager.Models;
 
 namespace SolutionManager
 {
@@ -35,15 +36,18 @@ namespace SolutionManager
         private static string[] _scopes = ["https://graph.microsoft.com/.default"];
 
         List<AuthProfile> authProfiles = new();
-        List<EnvironmentProfile> environmentProfiles = new();
-        List<SolutionProfile> solutionProfiles = new();
+        ObservableCollection<EnvironmentProfile> environmentProfiles = new();
+        ObservableCollection<SolutionProfile> solutionProfiles = new();
         ObservableCollection<RunningJob> jobs = new();
         ObservableCollection<string> matchingSettings = new();
         private Queue<RunningJob> jobQueue = new();
         string? userToken = null;
+        private static readonly string FavoritesFilePath = Path.Combine(AppContext.BaseDirectory, "favorites.json");
 
         public MainWindow()
         {
+            DebugSettings debugSettings = Application.Current.DebugSettings;
+            debugSettings.BindingFailed += (sender, args) => Debug.WriteLine(args.Message);
             this.InitializeComponent();
             jobsListBox.ItemsSource = jobs;
             matchingConfigsListBox.ItemsSource = matchingSettings;
@@ -51,7 +55,7 @@ namespace SolutionManager
             environmentList.ItemsSource = environmentProfiles;
             importEnvironmentList.ItemsSource = environmentProfiles;
 
-            // Set default file paths for config CSV files
+            // Set default file paths for config CSV files  
             string binDirectory = AppContext.BaseDirectory;
         }
 
@@ -126,11 +130,16 @@ namespace SolutionManager
             string? output = await RunPowerShellScriptAsync("pac env list");
             if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") == -1)
             {
-                environmentProfiles = ParseEnvironmentProfiles(output);
+                var newProfiles = ParseEnvironmentProfiles(output);
+
+                environmentProfiles.Clear();
+                foreach (var profile in newProfiles)
+                {
+                    environmentProfiles.Add(profile);
+                }
             }
             else if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") != -1)
             {
-                addEnvironmentButton.Visibility = Visibility.Visible;
                 if (!CsvFileHasRows())
                 {
                     await ShowManualEnvironmentEntryDialog();
@@ -221,7 +230,14 @@ namespace SolutionManager
                 var environments = await GetEnvironmentsWithDiscoAsync();
                 if (environments != null)
                 {
-                    environmentProfiles = environments;
+                    var newProfiles = environments;
+
+                    environmentProfiles.Clear();
+
+                    foreach (var profile in newProfiles)
+                    {
+                        environmentProfiles.Add(profile);
+                    }
 
                     var activeProfile = environmentProfiles.FirstOrDefault();
                     if (activeProfile != null)
@@ -464,7 +480,10 @@ namespace SolutionManager
                 }
             }
 
-            return solutionProfiles;
+            return solutionProfiles
+                .OrderByDescending(profile => profile.IsFavorite) // Sort by IsFavorite (true first)
+                .ThenBy(profile => profile.FriendlyName)          // Then sort alphabetically by FriendlyName
+                .ToList();
         }
         #endregion
 
@@ -495,6 +514,19 @@ namespace SolutionManager
                 {
                     nextJob.Status = "Failed";
                     nextJob.Output = "Predecessor job failed. This job will not run.";
+                    jobQueue.Dequeue();
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        jobsListBox.ItemsSource = null;
+                        jobsListBox.ItemsSource = jobs;
+                    });
+                    TryStartNextJob();
+                    return;
+                }
+                else if (predecessorJob != null && predecessorJob.Status == "Cancelled")
+                {
+                    nextJob.Status = "Cancelled";
+                    nextJob.Output = "Predecessor job cancelled. This job will not run.";
                     jobQueue.Dequeue();
                     DispatcherQueue.TryEnqueue(() =>
                     {
@@ -589,9 +621,45 @@ namespace SolutionManager
                 }
             });
         }
-        #endregion
+        private void ToggleFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.CommandParameter is SolutionProfile item)
+            {
+                // Toggle the IsFavorite property
+                item.IsFavorite = !item.IsFavorite;
 
-        #region Event Handlers
+                // Save the updated favorites to the file
+                SaveFavoritesToFile();
+            }
+
+            // Reorder the solutions list
+            solutionsList.ItemsSource = solutionProfiles
+                .OrderByDescending(profile => profile.IsFavorite)
+                .ThenBy(profile => profile.FriendlyName)
+                .ToList();
+        }
+
+        private void JobCancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.CommandParameter is RunningJob job)
+            {
+                if (job.Status == "Waiting")
+                {
+                    foreach (var j in jobs)
+                    {
+                        if (j.Id == job.Id)
+                        {
+                            j.Status = "Cancelled";
+                            j.Output = "Job cancelled by user.";
+                        }
+                    }
+                }
+                else
+                {
+                    jobs.Remove(job);
+                }
+            }
+        }
 
         private async void BrowseFolderButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1722,13 +1790,21 @@ namespace SolutionManager
                 string? output = await RunPowerShellScriptAsync($"pac solution list -env {selectedEnvironment.EnvironmentUrl}");
                 if (!string.IsNullOrEmpty(output))
                 {
-                    // Store the output in a string variable
-                    string solutionListOutput = output;
-                    Debug.WriteLine(solutionListOutput);
+                    var newProfiles = ParseSolutionProfiles(output);
 
-                    // Parse the solution profiles
-                    solutionProfiles = ParseSolutionProfiles(solutionListOutput);
-                    solutionsList.ItemsSource = solutionProfiles;
+                    solutionProfiles.Clear();
+                    foreach (var profile in newProfiles)
+                    {
+                        solutionProfiles.Add(profile);
+                    }
+
+                    // Load favorites from the file
+                    LoadFavoritesFromFile();
+
+                    solutionsList.ItemsSource = solutionProfiles
+                        .OrderByDescending(profile => profile.IsFavorite)
+                        .ThenBy(profile => profile.FriendlyName)
+                        .ToList();
                 }
             }
             else
@@ -1842,7 +1918,7 @@ namespace SolutionManager
         {
             _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
                 .WithClientSecret(_clientSecret)
-                .WithAuthority(new Uri($"https://login.microsoftonline.us/{_tenantId}"))
+                .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
                 .Build();
         }
 
@@ -2268,6 +2344,8 @@ namespace SolutionManager
             using (var reader = new StreamReader(csvFilePath))
             {
                 string headerLine = reader.ReadLine(); // Skip the header line
+
+                environmentProfiles.Clear();
                 while (!reader.EndOfStream)
                 {
                     var line = reader.ReadLine();
@@ -2283,10 +2361,6 @@ namespace SolutionManager
                             Active = bool.Parse(values[4])
                         };
                         environmentProfiles.Add(environmentProfile);
-                        environmentList.ItemsSource = null;
-                        environmentList.ItemsSource = environmentProfiles;
-                        importEnvironmentList.ItemsSource = null;
-                        importEnvironmentList.ItemsSource = environmentProfiles;
                     }
                 }
             }
@@ -2393,89 +2467,86 @@ namespace SolutionManager
             paragraph.Append(run);
             body.Append(paragraph);
         }
+        private void SaveFavoritesToFile()
+        {
+            try
+            {
+                // Load existing favorites from the file
+                Dictionary<string, List<string>> favoritesByEnvironment = new();
+
+                if (File.Exists(FavoritesFilePath))
+                {
+                    string jsonContent = File.ReadAllText(FavoritesFilePath);
+                    favoritesByEnvironment = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(jsonContent)
+                                           ?? new Dictionary<string, List<string>>();
+                }
+
+                // Get the currently selected environment
+                if (environmentList.SelectedItem is not EnvironmentProfile selectedEnvironment)
+                {
+                    Debug.WriteLine("No environment is currently selected.");
+                    return;
+                }
+
+                // Update the favorites for the selected environment
+                var favoriteSolutions = solutionProfiles
+                    .Where(profile => profile.IsFavorite)
+                    .Select(profile => profile.UniqueName)
+                    .ToList();
+
+                favoritesByEnvironment[selectedEnvironment.UniqueName] = favoriteSolutions;
+
+                // Save the updated favorites back to the file
+                string updatedJsonContent = JsonSerializer.Serialize(favoritesByEnvironment, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(FavoritesFilePath, updatedJsonContent);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error saving favorites: {ex.Message}");
+            }
+        }
+
+        private void LoadFavoritesFromFile()
+        {
+            try
+            {
+                if (!File.Exists(FavoritesFilePath))
+                {
+                    Debug.WriteLine("Favorites file does not exist.");
+                    return;
+                }
+
+                // Load the favorites from the file
+                string jsonContent = File.ReadAllText(FavoritesFilePath);
+                var favoritesByEnvironment = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(jsonContent);
+
+                if (favoritesByEnvironment == null)
+                {
+                    Debug.WriteLine("No favorites found in the file.");
+                    return;
+                }
+
+                // Get the currently selected environment
+                if (environmentList.SelectedItem is not EnvironmentProfile selectedEnvironment)
+                {
+                    Debug.WriteLine("No environment is currently selected.");
+                    return;
+                }
+
+                // Apply the favorites for the selected environment
+                if (favoritesByEnvironment.TryGetValue(selectedEnvironment.UniqueName, out var favoriteSolutions))
+                {
+                    foreach (var profile in solutionProfiles)
+                    {
+                        profile.IsFavorite = favoriteSolutions.Contains(profile.UniqueName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading favorites: {ex.Message}");
+            }
+        }
         #endregion
     }
-
-    #region Models
-    public class GuidConfig
-    {
-        public required string GUID { get; set; }
-        public required string NewValue { get; set; }
-        public required string TargetEnvironment { get; set; }
-    }
-
-    public class AuthProfile
-    {
-        public int Index { get; set; }
-        public bool Active { get; set; }
-        public required string Kind { get; set; }
-        public required string Name { get; set; }
-        public required string User { get; set; }
-        public string? Cloud { get; set; }
-        public string? Type { get; set; }
-        public required string Environment { get; set; }
-        public required string EnvironmentUrl { get; set; }
-        public string DisplayName => $"{Name} ({Environment})";
-    }
-
-    public class EnvironmentProfile
-    {
-        public required string DisplayName { get; set; }
-        public required string EnvironmentId { get; set; }
-        public required string EnvironmentUrl { get; set; }
-        public required string UniqueName { get; set; }
-        public bool Active { get; set; }
-    }
-
-    public class SolutionProfile
-    {
-        public required string UniqueName { get; set; }
-        public required string FriendlyName { get; set; }
-        public required string Version { get; set; }
-    }
-
-    public class RunningJob
-    {
-        public string Id { get; } = Guid.NewGuid().ToString(); // Unique ID for the job
-        public required string Name { get; set; }
-        public required string Status { get; set; }
-        public string? Environment { get; set; }
-        public string? Output { get; set; }
-        public string? Error { get; set; }
-        public required DateTime Timestamp { get; set; }
-        public string DisplayName => $"{(Status == "In Progress" ? "🏃‍♂️" : Status == "Failed" ? "🤬" : Status == "Waiting" ? "⏳" : "🥳")} {Name}";
-        public string? PredecessorId { get; set; } // The ID of the predecessor job
-        public Func<RunningJob, Task>? JobLogic { get; set; } // The logic to be executed for the job
-    }
-
-    public class EVSettings
-    {
-        public required string SchemaName { get; set; }
-        public required string Value { get; set; }
-        public required string Type { get; set; }
-        public required string TargetEnvironment { get; set; }
-    }
-
-    public class CRSettings
-    {
-        public required string LogicalName { get; set; }
-        public required string ConnectionId { get; set; }
-        public required string ConnectorId { get; set; }
-        public required string TargetEnvironment { get; set; }
-    }
-
-    public class GlobalDiscoveryResponse
-    {
-        public List<Instance> value { get; set; }
-    }
-
-    public class Instance
-    {
-        public string FriendlyName { get; set; }
-        public string EnvironmentId { get; set; }
-        public string ApiUrl { get; set; }
-        public string UniqueName { get; set; }
-        public string State { get; set; }
-    }
-    #endregion
 }

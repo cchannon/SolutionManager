@@ -661,6 +661,61 @@ namespace SolutionManager
             }
         }
 
+        private void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Show the export settings dialog
+            exportSettingsFolderPathTextBox.Text = string.Empty;
+            settingsExportDialog.ShowAsync();
+        }
+
+        private void ExportSettingsDialogButton_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            string targetFolderPath = exportSettingsFolderPathTextBox.Text;
+
+            if (string.IsNullOrEmpty(targetFolderPath))
+            {
+                ShowErrorDialog("Please select a folder to export the settings.");
+                args.Cancel = true; // Prevent the dialog from closing
+                return;
+            }
+
+            try
+            {
+                // Perform the export logic here
+                ExportAllSettingsToFolder(targetFolderPath);
+            }
+            catch (Exception ex)
+            {
+                ShowErrorDialog($"Error exporting settings: {ex.Message}");
+            }
+        }
+
+        private void ExportAllSettingsToFolder(string folderPath)
+        {
+            // Copy all *.settings.json files from the bin directory to the target directory
+            string binDirectory = AppContext.BaseDirectory;
+            string[] settingsFiles = Directory.GetFiles(binDirectory, "*.settings.json", SearchOption.TopDirectoryOnly);
+
+            foreach (var settingsFile in settingsFiles)
+            {
+                string targetFilePath = Path.Combine(folderPath, Path.GetFileName(settingsFile));
+                File.Copy(settingsFile, targetFilePath, overwrite: true);
+            }
+
+            // Export the environments CSV file
+            string csvFilePath = Path.Combine(AppContext.BaseDirectory, "environments.csv");
+            if (File.Exists(csvFilePath))
+            {
+                string targetCsvPath = Path.Combine(folderPath, "environments.csv");
+                File.Copy(csvFilePath, targetCsvPath, overwrite: true);
+            }
+            else
+            {
+                Debug.WriteLine("environments.csv file not found.");
+            }
+        }
+
+
         private async void BrowseFolderButton_Click(object sender, RoutedEventArgs e)
         {
             var picker = new FolderPicker();
@@ -679,6 +734,9 @@ namespace SolutionManager
                     {
                         case "exportPathBrowse":
                             zipFilePathTextBox.Text = folder.Path;
+                            break;
+                        case "browseSettingsExportFolderButton":
+                            exportSettingsFolderPathTextBox.Text = folder.Path;
                             break;
                     }
                 }

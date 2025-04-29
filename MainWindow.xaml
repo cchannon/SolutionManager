@@ -833,13 +833,28 @@
                           Padding="10"
                           Margin="10"
                           CornerRadius="5">
-                        <Button x:Name="exportJobLogButton"
-                                Content="Export Job Log"
-                                Click="ExportJobLogButton_Click"
-                                Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                                Foreground="White"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center" />
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Button x:Name="exportJobLogButton"      
+                                    Grid.Row="0"
+                                    Content="Export Job Log"
+                                    Click="ExportJobLogButton_Click"
+                                    Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                    Foreground="White"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+                            <Button x:Name="exportSettingsButton"
+                                    Grid.Row="1"
+                                    Content="Export Settings"
+                                    Click="ExportSettingsButton_Click"
+                                    Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                    Foreground="White"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+                        </Grid>
                     </Grid>
                     <!-- Jobs Panel -->
                     <Grid x:Name="jobsPanel"
@@ -890,7 +905,7 @@
                                                 VerticalAlignment="Center"    
                                                 Grid.Column="1"
                                                 Content="❌"
-                                                FontSize="14"
+                                                FontSize="8"
                                                 Click="JobCancelButton_Click"
                                                 CommandParameter="{Binding}"
                                                 Background="Transparent"
@@ -1037,6 +1052,35 @@
                              Margin="10" 
                              Width="800"/>
                 </ScrollViewer>
+            </ContentDialog>
+            <!-- Settings export Folder Picker -->
+            <ContentDialog x:Name="settingsExportDialog"
+                           Title="Export Settings"
+                           PrimaryButtonText="Export"
+                           CloseButtonText="Cancel"
+                           PrimaryButtonClick="ExportSettingsDialogButton_Click">
+                <StackPanel>
+                    <TextBlock Text="Select the folder where you want to export all settings:"
+                               Margin="0,0,0,10"
+                               Foreground="{ThemeResource SystemBaseHighColor}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2.5*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="exportSettingsFolderPathTextBox"
+                                IsReadOnly="True"
+                                Background="DarkGray"
+                                Margin="0,0,10,0"
+                                Grid.Column="0" />     
+                        <Button x:Name="browseSettingsExportFolderButton"
+                                Content="Browse"
+                                Click="BrowseFolderButton_Click"
+                                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                Foreground="White"
+                                Grid.Column="1" />
+                    </Grid>
+                </StackPanel>
             </ContentDialog>
         </Grid>
     </Page>

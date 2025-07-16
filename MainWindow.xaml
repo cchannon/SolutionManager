@@ -933,13 +933,13 @@
                                         Grid.Row="0"
                                         Grid.Column="2"
                                         Content="🔁"
-                                        FontSize="10"
+                                        FontSize="20"
                                         Click="refreshVersions_Click"
                                         CommandParameter="{Binding}"
                                         Background="Transparent"
                                         BorderThickness="0"
                                         Foreground="{ThemeResource SystemBaseHighColor}"
-                                        Visibility="Visible" >
+                                        Visibility="Visible" />
                             <TextBlock Text="Version in Dev:"
                                        FontWeight="SemiBold"
                                        Margin="10"

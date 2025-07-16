@@ -117,11 +117,11 @@ namespace SolutionManager
             var environments = DcmServiceClient.RetrieveMultiple(query);
             if(environments != null && environments.Entities.Count > 0)
             {
-                _currentDevBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-Dev")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                _currentDevBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-Dev")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
                 versionInDevTextBox.Text = _currentDevBuild ?? "";
-                _currentTestBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-OppHub-DMM-Test")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                _currentTestBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-OppHub-DMM-Test")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
                 versionInTestTextBox.Text = _currentTestBuild ?? "";
-                _currentProdBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-Prod")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                _currentProdBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-Prod")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
                 versionInProdTextBox.Text = _currentProdBuild ?? "";
 
                 if(_currentDevBuild == null || _currentTestBuild == null || _currentProdBuild == null)
@@ -708,7 +708,35 @@ namespace SolutionManager
 
         private void UpdateDCMReleasesButton_Click(object sender, RoutedEventArgs e)
         {
-            _
+            QueryExpression query = new QueryExpression("lmco_dcmenvironment");
+            query.ColumnSet = new ColumnSet(true);
+            query.Criteria.AddCondition(new ConditionExpression("statecode", ConditionOperator.Equal, 0));
+            var environments = DcmServiceClient.RetrieveMultiple(query);
+            if (environments != null && environments.Entities.Count > 0)
+            {
+                var dev = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-Dev")?.FirstOrDefault();
+                if(dev != null)
+                {
+                    dev["lmco_currentrelease"] = versionInDevTextBox.Text;
+                    DcmServiceClient.Update(dev);
+                }
+                var test = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-OppHub-DMM-Test")?.FirstOrDefault();
+                if(test != null)
+                {
+                    test["lmco_currentrelease"] = versionInTestTextBox.Text;
+                    DcmServiceClient.Update(test);
+                }
+                var prod = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_name") == "GBDS-Prod")?.FirstOrDefault();
+                if (prod != null)
+                {
+                    prod["lmco_currentrelease"] = versionInProdTextBox.Text;
+                    DcmServiceClient.Update(prod);
+                }
+            }
+            else
+            {
+                //do something!
+            }
         }
 
         private void ExportSettingsDialogButton_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -2040,7 +2068,7 @@ namespace SolutionManager
         {
             _msalClient = ConfidentialClientApplicationBuilder.Create(_clientId)
                 .WithClientSecret(_clientSecret)
-                .WithAuthority(new Uri($"https://login.microsoftonline.com/{_tenantId}"))
+                .WithAuthority(new Uri($"https://login.microsoftonline.us/{_tenantId}"))
                 .Build();
         }
 

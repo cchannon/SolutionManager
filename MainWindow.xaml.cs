@@ -34,6 +34,10 @@ namespace SolutionManager
         private static string _clientSecret = ""; // Replace with your client secret
         private static string _tenantId = ""; // Replace with your tenant ID
         private static string[] _scopes = ["https://graph.microsoft.com/.default"];
+        private static string _DcmEnvironmentUrl = "";
+        private static string _currentProdBuild = "";
+        private static string _currentTestBuild = "";
+        private static string _currentDevBuild = "";
 
         List<AuthProfile> authProfiles = new();
         ObservableCollection<EnvironmentProfile> environmentProfiles = new();
@@ -43,6 +47,7 @@ namespace SolutionManager
         private Queue<RunningJob> jobQueue = new();
         string? userToken = null;
         private static readonly string FavoritesFilePath = Path.Combine(AppContext.BaseDirectory, "favorites.json");
+        ServiceClient DcmServiceClient;
 
         public MainWindow()
         {
@@ -73,6 +78,7 @@ namespace SolutionManager
         public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
             InitializeMsalClient();
+            InitializeDcmServiceClient();
             var authResult = await SignInUserAsync();
             if (authResult != null)
             {
@@ -102,6 +108,32 @@ namespace SolutionManager
         }
 
         #region Async Job Handlers
+        private async Task InitializeDcmServiceClient()
+        {
+            DcmServiceClient = GetServiceClient(_DcmEnvironmentUrl);
+            QueryExpression query = new QueryExpression("lmco_dcmenvironment");
+            query.ColumnSet = new ColumnSet(true);
+            query.Criteria.AddCondition(new ConditionExpression("statecode", ConditionOperator.Equal, 0));
+            var environments = DcmServiceClient.RetrieveMultiple(query);
+            if(environments != null && environments.Entities.Count > 0)
+            {
+                _currentDevBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-Dev")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                versionInDevTextBox.Text = _currentDevBuild ?? "";
+                _currentTestBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-OppHub-DMM-Test")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                versionInTestTextBox.Text = _currentTestBuild ?? "";
+                _currentProdBuild = environments.Entities.Where(x => x.GetAttributeValue<string>("lmco_environmentname") == "GBDS-Prod")?.FirstOrDefault()?.GetAttributeValue<string>("lmco_currentrelease");
+                versionInProdTextBox.Text = _currentProdBuild ?? "";
+
+                if(_currentDevBuild == null || _currentTestBuild == null || _currentProdBuild == null)
+                {
+                    //do something!
+                }
+            } 
+            else 
+            {
+                //do something!
+            }
+        }
         private async Task InitializeAuthProfilesAsync()
         {
             progressRingOverlay.Visibility = Visibility.Visible;
@@ -621,6 +653,12 @@ namespace SolutionManager
                 }
             });
         }
+
+        private void refreshVersions_Click(object sender, RoutedEventArgs e)
+        {
+            InitializeDcmServiceClient();
+        }
+
         private void ToggleFavorite_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as Button)?.CommandParameter is SolutionProfile item)
@@ -668,6 +706,11 @@ namespace SolutionManager
             settingsExportDialog.ShowAsync();
         }
 
+        private void UpdateDCMReleasesButton_Click(object sender, RoutedEventArgs e)
+        {
+            _
+        }
+
         private void ExportSettingsDialogButton_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             string targetFolderPath = exportSettingsFolderPathTextBox.Text;
@@ -688,6 +731,27 @@ namespace SolutionManager
             {
                 ShowErrorDialog($"Error exporting settings: {ex.Message}");
             }
+        }
+
+        private void ListInactiveButton_Click(object sender, RoutedEventArgs e)
+        {
+            
+            
+        }
+
+        private void ActivateSelectedAutomationsButton_Click(object sender, RoutedEventArgs e)
+        {
+            
+        }
+
+        private void ActivateAllAutomationsButton_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void DeactivateAllAutomationsButton_Click(object sender, RoutedEventArgs e)
+        {
+
         }
 
         private void ExportAllSettingsToFolder(string folderPath)

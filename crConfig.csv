@@ -1,5 +1,0 @@
-LogicalName,ConnectionId,ConnectorId,TargetEnvironment
-lmco_sharedcommondataserviceforapps_0a3fa,NewValue1,NewValue1a,Dev
-lmco_sharedcommondataserviceforapps_0a3fa,NewValue2,NewValue2a,Test
-lmco_sharedcommondataserviceforapps_0a3fa,NewValue3,NewValue3a,Prod
-lmco_sharedcommondataserviceforapps_0a3fa,test,testa,another

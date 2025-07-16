@@ -1,5 +1,0 @@
-SchemaName,Value,Type,TargetEnvironment
-lmco_EntraIDRequestPath,NewValue1,String,Dev
-lmco_EntraIDRequestPath,1234,Int,Test
-lmco_EntraIDRequestPath,true,Boolean,Prod
-lmco_EntraIDRequestPath,test,String,another

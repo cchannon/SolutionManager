@@ -78,7 +78,6 @@ namespace SolutionManager
         public async void Grid_Loaded(object sender, RoutedEventArgs e)
         {
             InitializeMsalClient();
-            InitializeDcmServiceClient();
             var authResult = await SignInUserAsync();
             if (authResult != null)
             {
@@ -105,6 +104,7 @@ namespace SolutionManager
             storyboard.Children.Add(fadeAnimation3);
 
             storyboard.Begin();
+            InitializeDcmServiceClient();
         }
 
         #region Async Job Handlers

@@ -136,7 +136,7 @@ namespace SolutionManager
         }
         private async Task InitializeAuthProfilesAsync()
         {
-            progressRingOverlay.Visibility = Visibility.Visible;
+            DispatcherQueue.TryEnqueue(() => progressRingOverlay.Visibility = Visibility.Visible);
 
             string? output = await RunPowerShellScriptAsync("pac auth list");
             if (!string.IsNullOrEmpty(output))
@@ -148,7 +148,7 @@ namespace SolutionManager
                 var activeProfile = authProfiles.FirstOrDefault(p => p.Active);
                 if (activeProfile != null)
                 {
-                    authProfileText.Text = $"Auth Profile: {activeProfile.Name}";
+                    DispatcherQueue.TryEnqueue(() => authProfileText.Text = $"Auth Profile: {activeProfile.Name}");
                 }
 
                 // Retrieve the list of environments
@@ -158,17 +158,19 @@ namespace SolutionManager
 
         private async Task RetrieveEnvironmentProfilesAsync()
         {
-            progressRingOverlay.Visibility = Visibility.Visible;
+            DispatcherQueue.TryEnqueue(() => progressRingOverlay.Visibility = Visibility.Visible);
             string? output = await RunPowerShellScriptAsync("pac env list");
             if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") == -1)
             {
                 var newProfiles = ParseEnvironmentProfiles(output);
 
-                environmentProfiles.Clear();
-                foreach (var profile in newProfiles)
-                {
-                    environmentProfiles.Add(profile);
-                }
+                DispatcherQueue.TryEnqueue(() => {
+                    environmentProfiles.Clear();
+                    foreach (var profile in newProfiles)
+                    {
+                        environmentProfiles.Add(profile);
+                    }
+                });
             }
             else if (!string.IsNullOrEmpty(output) && output.IndexOf("not have permission") != -1)
             {
@@ -181,7 +183,7 @@ namespace SolutionManager
                     ReadEnvironmentsFromCsv();
                 }
             }
-            progressRingOverlay.Visibility = Visibility.Collapsed;
+            DispatcherQueue.TryEnqueue(() => progressRingOverlay.Visibility = Visibility.Collapsed);
         }
 
         private async Task ShowManualEnvironmentEntryDialog()
@@ -221,9 +223,8 @@ namespace SolutionManager
                                     var environmentProfile = ParseEnvironmentInfo(output);
                                     if (environmentProfile != null)
                                     {
-                                        environmentProfiles.Add(environmentProfile);
-                                        DispatcherQueue.TryEnqueue(() =>
-                                        {
+                                        DispatcherQueue.TryEnqueue(() => environmentProfiles.Add(environmentProfile));
+                                        DispatcherQueue.TryEnqueue(() => {
                                             environmentList.ItemsSource = null;
                                             environmentList.ItemsSource = environmentProfiles;
                                             importEnvironmentList.ItemsSource = null;
@@ -523,9 +524,9 @@ namespace SolutionManager
         private void EnqueueJob(RunningJob job)
         {
             job.Status = "Waiting";
-            jobQueue.Enqueue(job);
-            jobs.Add(job);
-            jobsPanel.Visibility = Visibility.Visible;
+            DispatcherQueue.TryEnqueue(() => jobQueue.Enqueue(job));
+            DispatcherQueue.TryEnqueue(() => jobs.Add(job));
+            DispatcherQueue.TryEnqueue(() => jobsPanel.Visibility = Visibility.Visible);
             TryStartNextJob();
         }
 
@@ -546,9 +547,8 @@ namespace SolutionManager
                 {
                     nextJob.Status = "Failed";
                     nextJob.Output = "Predecessor job failed. This job will not run.";
-                    jobQueue.Dequeue();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
+                    DispatcherQueue.TryEnqueue(() => jobQueue.Dequeue());
+                    DispatcherQueue.TryEnqueue(() => {
                         jobsListBox.ItemsSource = null;
                         jobsListBox.ItemsSource = jobs;
                     });
@@ -559,9 +559,8 @@ namespace SolutionManager
                 {
                     nextJob.Status = "Cancelled";
                     nextJob.Output = "Predecessor job cancelled. This job will not run.";
-                    jobQueue.Dequeue();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
+                    DispatcherQueue.TryEnqueue(() => jobQueue.Dequeue());
+                    DispatcherQueue.TryEnqueue(() => {
                         jobsListBox.ItemsSource = null;
                         jobsListBox.ItemsSource = jobs;
                     });
@@ -571,8 +570,8 @@ namespace SolutionManager
                 else if (predecessorJob != null && (predecessorJob.Status == "Waiting" || predecessorJob.Status == "In Progress"))
                 {
                     // Move the job to the end of the queue
-                    jobQueue.Dequeue();
-                    jobQueue.Enqueue(nextJob);
+                    DispatcherQueue.TryEnqueue(() => jobQueue.Dequeue());
+                    DispatcherQueue.TryEnqueue(() => jobQueue.Enqueue(nextJob));
                     // Wait 1 second before retry to limit the tax on the system
                     await Task.Delay(TimeSpan.FromSeconds(1));
                     TryStartNextJob();
@@ -580,11 +579,10 @@ namespace SolutionManager
                 }
             }
 
-            nextJob = jobQueue.Dequeue();
+            DispatcherQueue.TryEnqueue(() => jobQueue.Dequeue());
             nextJob.Status = "In Progress";
 
-            DispatcherQueue.TryEnqueue(() =>
-            {
+            DispatcherQueue.TryEnqueue(() => {
                 jobsListBox.ItemsSource = null;
                 jobsListBox.ItemsSource = jobs;
             });
@@ -609,8 +607,7 @@ namespace SolutionManager
                 }
                 finally
                 {
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
+                    DispatcherQueue.TryEnqueue(() => {
                         jobsListBox.ItemsSource = null;
                         jobsListBox.ItemsSource = jobs;
                     });
@@ -622,8 +619,8 @@ namespace SolutionManager
         private void StartJob(RunningJob job)
         {
             job.Status = "In Progress";
-            jobs.Add(job);
-            jobsPanel.Visibility = Visibility.Visible;
+            DispatcherQueue.TryEnqueue(() => jobs.Add(job));
+            DispatcherQueue.TryEnqueue(() => jobsPanel.Visibility = Visibility.Visible);
 
             _ = Task.Run(async () =>
             {
@@ -645,8 +642,7 @@ namespace SolutionManager
                 }
                 finally
                 {
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
+                    DispatcherQueue.TryEnqueue(() => {
                         jobsListBox.ItemsSource = null;
                         jobsListBox.ItemsSource = jobs;
                     });
@@ -671,10 +667,10 @@ namespace SolutionManager
             }
 
             // Reorder the solutions list
-            solutionsList.ItemsSource = solutionProfiles
+            DispatcherQueue.TryEnqueue(() => solutionsList.ItemsSource = solutionProfiles
                 .OrderByDescending(profile => profile.IsFavorite)
                 .ThenBy(profile => profile.FriendlyName)
-                .ToList();
+                .ToList());
         }
 
         private void JobCancelButton_Click(object sender, RoutedEventArgs e)
@@ -694,7 +690,7 @@ namespace SolutionManager
                 }
                 else
                 {
-                    jobs.Remove(job);
+                    DispatcherQueue.TryEnqueue(() => jobs.Remove(job));
                 }
             }
         }
@@ -1095,10 +1091,12 @@ namespace SolutionManager
         private void RemoveSelectedSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             var selectedItems = matchingConfigsListBox.SelectedItems.Cast<string>().ToList();
-            foreach (var item in selectedItems)
-            {
-                matchingSettings.Remove(item);
-            }
+            DispatcherQueue.TryEnqueue(() => {
+                foreach (var item in selectedItems)
+                {
+                    matchingSettings.Remove(item);
+                }
+            });
 
             string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
             if (File.Exists(settingsFilePath))
@@ -1134,7 +1132,7 @@ namespace SolutionManager
                     string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
                     File.WriteAllText(settingsFilePath, updatedJsonContent);
 
-                    settingsLogTextBlock.Text = $"Removed selected settings from {settingsFilePath}." + Environment.NewLine;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = $"Removed selected settings from {settingsFilePath}." + Environment.NewLine);
                 }
             }
         }
@@ -1515,14 +1513,14 @@ namespace SolutionManager
                 var selectedProfile = (AuthProfile)listBox.SelectedItem;
                 if (selectedProfile != null)
                 {
-                    authProfileText.Text = $"Auth Profile: {selectedProfile.Name}";
+                    DispatcherQueue.TryEnqueue(() => authProfileText.Text = $"Auth Profile: {selectedProfile.Name}");
                     // Set the selected profile as active
-                    progressRingOverlay.Visibility = Visibility.Visible;
+                    DispatcherQueue.TryEnqueue(() => progressRingOverlay.Visibility = Visibility.Visible);
                     Debug.WriteLine("ProgressRingOverlay set to Visible");
                     await RunPowerShellScriptAsync($"pac auth select --index {selectedProfile.Index}");
                     // Retrieve the list of environments
                     await RetrieveEnvironmentProfilesAsync();
-                    progressRingOverlay.Visibility = Visibility.Collapsed;
+                    DispatcherQueue.TryEnqueue(() => progressRingOverlay.Visibility = Visibility.Collapsed);
                     Debug.WriteLine("ProgressRingOverlay set to Collapsed");
                 }
             };
@@ -1795,14 +1793,14 @@ namespace SolutionManager
                             string updatedJsonContent = JsonSerializer.Serialize(updatedJson, new JsonSerializerOptions { WriteIndented = true });
                             File.WriteAllText(settingsFilePath, updatedJsonContent);
 
-                            settingsLogTextBlock.Text = $"Settings for {selectedC} updated successfully." + Environment.NewLine;
-                            matchingConfigsListBox.SelectedItem = null;
+                            DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = $"Settings for {selectedC} updated successfully." + Environment.NewLine);
+                            DispatcherQueue.TryEnqueue(() => matchingConfigsListBox.SelectedItem = null);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine);
                 }
             }
         }
@@ -1831,8 +1829,8 @@ namespace SolutionManager
                                     if (envProperty.Name == selectedC)
                                     {
                                         string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
-                                        settingsUpdateTextBox.Text = jsonValue;
-                                        settingsUpdateDialog.ShowAsync();
+                                        DispatcherQueue.TryEnqueue(() => settingsUpdateTextBox.Text = jsonValue);
+                                        DispatcherQueue.TryEnqueue(() => settingsUpdateDialog.ShowAsync());
                                         return;
                                     }
                                 }
@@ -1842,7 +1840,7 @@ namespace SolutionManager
                 }
                 catch (Exception ex)
                 {
-                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine);
                 }
             }
         }
@@ -1951,10 +1949,10 @@ namespace SolutionManager
                     // Load favorites from the file
                     LoadFavoritesFromFile();
 
-                    solutionsList.ItemsSource = solutionProfiles
+                    DispatcherQueue.TryEnqueue(() => solutionsList.ItemsSource = solutionProfiles
                         .OrderByDescending(profile => profile.IsFavorite)
                         .ThenBy(profile => profile.FriendlyName)
-                        .ToList();
+                        .ToList());
                 }
             }
             else
@@ -1985,7 +1983,7 @@ namespace SolutionManager
                 var solutions = serviceClient.RetrieveMultiple(query).Entities;
                 if (solutions.Count > 0)
                 {
-                    currentVersionDisplayText.Text = "(currently " + solutions.First().GetAttributeValue<string>("version") + ")";
+                    DispatcherQueue.TryEnqueue(() => currentVersionDisplayText.Text = "(currently " + solutions.First().GetAttributeValue<string>("version") + ")");
                 }
 
                 solutionDetailsPanel.Visibility = Visibility.Visible;
@@ -2000,16 +1998,16 @@ namespace SolutionManager
         {
             if (jobsListBox.SelectedItem is RunningJob selectedJob)
             {
-                jobNameTextBlock.Text = selectedJob.Name;
-                jobStatusTextBlock.Text = selectedJob.Status;
-                jobEnvironmentTextBlock.Text = selectedJob.Environment ?? "N/A";
-                jobTimestampTextBlock.Text = selectedJob.Timestamp.ToString("g");
-                jobOutputTextBlock.Text = selectedJob.Output ?? "N/A";
-                jobErrorTextBlock.Text = selectedJob.Error ?? "N/A";
-                jobIdTextBlock.Text = selectedJob.Id;
-                jobPredecessorTextBlock.Text = selectedJob.PredecessorId ?? "N/A";
+                DispatcherQueue.TryEnqueue(() => jobNameTextBlock.Text = selectedJob.Name);
+                DispatcherQueue.TryEnqueue(() => jobStatusTextBlock.Text = selectedJob.Status);
+                DispatcherQueue.TryEnqueue(() => jobEnvironmentTextBlock.Text = selectedJob.Environment ?? "N/A");
+                DispatcherQueue.TryEnqueue(() => jobTimestampTextBlock.Text = selectedJob.Timestamp.ToString("g"));
+                DispatcherQueue.TryEnqueue(() => jobOutputTextBlock.Text = selectedJob.Output ?? "N/A");
+                DispatcherQueue.TryEnqueue(() => jobErrorTextBlock.Text = selectedJob.Error ?? "N/A");
+                DispatcherQueue.TryEnqueue(() => jobIdTextBlock.Text = selectedJob.Id);
+                DispatcherQueue.TryEnqueue(() => jobPredecessorTextBlock.Text = selectedJob.PredecessorId ?? "N/A");
 
-                _ = jobDetailsDialog.ShowAsync();
+                DispatcherQueue.TryEnqueue(() => _ = jobDetailsDialog.ShowAsync());
             }
         }
 
@@ -2017,10 +2015,9 @@ namespace SolutionManager
         {
             if (matchingConfigsListBox.SelectedItem is string selectedConfig)
             {
-                
                 string selectedC = selectedConfig.Replace("⚠️ ", string.Empty);
-                removeSelectedSettingsButton.Visibility = Visibility.Visible;
-                editSelectedSettingsButton.Visibility = Visibility.Visible;
+                DispatcherQueue.TryEnqueue(() => removeSelectedSettingsButton.Visibility = Visibility.Visible);
+                DispatcherQueue.TryEnqueue(() => editSelectedSettingsButton.Visibility = Visibility.Visible);
                 try
                 {
                     string settingsFilePath = GetSettingsFilePath(settingsSolutionZipTextBox.Text);
@@ -2040,7 +2037,7 @@ namespace SolutionManager
                                     if (envProperty.Name == selectedC)
                                     {
                                         string jsonValue = JsonSerializer.Serialize(envProperty.Value, new JsonSerializerOptions { WriteIndented = true });
-                                        settingsLogTextBlock.Text = jsonValue;
+                                        DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = jsonValue);
                                         return;
                                     }
                                 }
@@ -2050,13 +2047,13 @@ namespace SolutionManager
                 }
                 catch (Exception ex)
                 {
-                    settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text = $"Error: {ex.Message}" + Environment.NewLine);
                 }
             }
             else
             {
-                removeSelectedSettingsButton.Visibility = Visibility.Collapsed;
-                editSelectedSettingsButton.Visibility = Visibility.Collapsed;
+                DispatcherQueue.TryEnqueue(() => removeSelectedSettingsButton.Visibility = Visibility.Collapsed);
+                DispatcherQueue.TryEnqueue(() => editSelectedSettingsButton.Visibility = Visibility.Collapsed);
             }
         }
 
@@ -2195,7 +2192,7 @@ namespace SolutionManager
                     using JsonDocument document = JsonDocument.Parse(jsonContent);
                     JsonElement root = document.RootElement;
 
-                    matchingSettings.Clear();
+                    DispatcherQueue.TryEnqueue(() => matchingSettings.Clear());
 
                     if (root.TryGetProperty("Environments", out JsonElement environments))
                     {
@@ -2203,41 +2200,41 @@ namespace SolutionManager
                         {
                             foreach (JsonProperty envProperty in env.EnumerateObject())
                             {
-                                matchingSettings.Add(envProperty.Name);
+                                DispatcherQueue.TryEnqueue(() => matchingSettings.Add(envProperty.Name));
                             }
                         }
                     }
 
                     string message = $"Settings file {settingsFilePath} found.";
-                    settingsLogTextBlock.Text += message + Environment.NewLine;
-                    settingsResults.Visibility = Visibility.Visible;
-                    matchingConfigs.Visibility = Visibility.Visible;
-                    matchingConfigsListBox.Visibility = Visibility.Visible;
-                    storedSettingsSetup.Visibility = Visibility.Visible;
-                    singleSettingsFilePicker.Visibility = Visibility.Collapsed;
-                    matchingConfigsNoneBox.Visibility = Visibility.Collapsed;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text += message + Environment.NewLine);
+                    DispatcherQueue.TryEnqueue(() => settingsResults.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigs.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigsListBox.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => storedSettingsSetup.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => singleSettingsFilePicker.Visibility = Visibility.Collapsed);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigsNoneBox.Visibility = Visibility.Collapsed);
                 }
                 else
                 {
                     string message = $"Settings file {settingsFilePath} not found.";
-                    settingsLogTextBlock.Text += message + Environment.NewLine;
-                    matchingConfigs.Visibility = Visibility.Visible;
-                    matchingConfigsListBox.Visibility = Visibility.Collapsed;
-                    matchingConfigsNoneBox.Visibility = Visibility.Visible;
-                    storedSettingsSetup.Visibility = Visibility.Collapsed;
-                    singleSettingsFilePicker.Visibility = Visibility.Visible;
-                    settingsResults.Visibility = Visibility.Visible;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text += message + Environment.NewLine);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigs.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigsListBox.Visibility = Visibility.Collapsed);
+                    DispatcherQueue.TryEnqueue(() => matchingConfigsNoneBox.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => storedSettingsSetup.Visibility = Visibility.Collapsed);
+                    DispatcherQueue.TryEnqueue(() => singleSettingsFilePicker.Visibility = Visibility.Visible);
+                    DispatcherQueue.TryEnqueue(() => settingsResults.Visibility = Visibility.Visible);
                 }
             }
             catch (Exception ex)
             {
                 string message = $"Error: {ex.Message}";
-                settingsLogTextBlock.Text += message + Environment.NewLine;
-                matchingConfigsListBox.Visibility = Visibility.Collapsed;
-                matchingConfigsNoneBox.Visibility = Visibility.Visible;
-                storedSettingsSetup.Visibility = Visibility.Collapsed;
-                singleSettingsFilePicker.Visibility = Visibility.Visible;
-                settingsResults.Visibility = Visibility.Visible;
+                DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text += message + Environment.NewLine);
+                DispatcherQueue.TryEnqueue(() => matchingConfigsListBox.Visibility = Visibility.Collapsed);
+                DispatcherQueue.TryEnqueue(() => matchingConfigsNoneBox.Visibility = Visibility.Visible);
+                DispatcherQueue.TryEnqueue(() => storedSettingsSetup.Visibility = Visibility.Collapsed);
+                DispatcherQueue.TryEnqueue(() => singleSettingsFilePicker.Visibility = Visibility.Visible);
+                DispatcherQueue.TryEnqueue(() => settingsResults.Visibility = Visibility.Visible);
             }
         }
 
@@ -2386,27 +2383,27 @@ namespace SolutionManager
 
             if (hasIssues)
             {
-                settingsLogTextBlock.Text += $"Issues found in environment '{environmentName}':" + Environment.NewLine;
+                DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text += $"Issues found in environment '{environmentName}':" + Environment.NewLine);
                 foreach (var issue in issues)
                 {
-                    settingsLogTextBlock.Text += "⚠️ " + issue + Environment.NewLine;
+                    DispatcherQueue.TryEnqueue(() => settingsLogTextBlock.Text += "⚠️ " + issue + Environment.NewLine);
                 }
 
                 // Remove and re-add the item in the ListBox
-                if (matchingSettings.Contains(environmentName))
+                if (DispatcherQueue.TryEnqueue(() => matchingSettings.Contains($"⚠️ {environmentName}")))
                 {
-                    matchingSettings.Remove(environmentName);
-                    matchingSettings.Add($"⚠️ {environmentName}");
+                    DispatcherQueue.TryEnqueue(() => matchingSettings.Remove($"⚠️ {environmentName}"));
+                    DispatcherQueue.TryEnqueue(() => matchingSettings.Add(environmentName));
                 }
             }
             else
             {
                 // Check if the environmentName has been flagged with the warning icon
                 string flaggedEnvironmentName = $"⚠️ {environmentName}";
-                if (matchingSettings.Contains(flaggedEnvironmentName))
+                if (DispatcherQueue.TryEnqueue(() => matchingSettings.Contains(flaggedEnvironmentName)))
                 {
-                    matchingSettings.Remove(flaggedEnvironmentName);
-                    matchingSettings.Add(environmentName);
+                    DispatcherQueue.TryEnqueue(() => matchingSettings.Remove(flaggedEnvironmentName));
+                    DispatcherQueue.TryEnqueue(() => matchingSettings.Add(environmentName));
                 }
             }
         }
@@ -2686,10 +2683,12 @@ namespace SolutionManager
                 // Apply the favorites for the selected environment
                 if (favoritesByEnvironment.TryGetValue(selectedEnvironment.UniqueName, out var favoriteSolutions))
                 {
-                    foreach (var profile in solutionProfiles)
-                    {
-                        profile.IsFavorite = favoriteSolutions.Contains(profile.UniqueName);
-                    }
+                    DispatcherQueue.TryEnqueue(() => {
+                        foreach (var profile in solutionProfiles)
+                        {
+                            profile.IsFavorite = favoriteSolutions.Contains(profile.UniqueName);
+                        }
+                    });
                 }
             }
             catch (Exception ex)
